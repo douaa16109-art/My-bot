@@ -156,11 +156,12 @@ def handle_buttons(call):
                 if not p['done']:
                     mentions += f"[{p['name']}](tg://user?id={p['id']}) "
             
+            # العبارة التي طلبتِها حصراً مع منشن لمن لم تسجل
+            msg = f"🔔 هَلُمُّوا إِلَى مَجْلِسٍ تَحُفُّنَا فِيهِ المَلَائِكَةُ 🌿\n\n"
             if mentions:
-                msg = f"🔔 هَلُمُّوا إِلَى مَجْلِسٍ تَحُفُّنَا فِيهِ المَلَائِكَةُ 🌿\n\nننتظر إتمامكن للورد القراءاتي:\n{mentions}"
-                bot.send_message(cid, msg, parse_mode="Markdown")
-            else:
-                bot.answer_callback_query(call.id, "ما شاء الله، الجميع أتم!")
+                msg += f"ننتظر إتمامكن للورد القراءاتي:\n{mentions}\n\n"
+            msg += "⚠️ وتذكير لمن لم تسجل اسمها بعد؛ سارعي بالحجز والمشاركة."
+            bot.send_message(cid, msg, parse_mode="Markdown")
 
     elif call.data == "toggle_lock":
         if is_user_admin(cid, uid): data['is_open'] = not data['is_open']
