@@ -24,7 +24,7 @@ data = {
     'is_open': True,
     'extra_allowed': False,
     'page_step': 2,
-    'swap_temp': None # لتخزين الطالبة الأولى عند التبديل
+    'swap_temp': None 
 }
 
 def is_user_admin(chat_id, user_id):
@@ -35,6 +35,7 @@ def is_user_admin(chat_id, user_id):
     except: return False
 
 def reorder_pages():
+    """إعادة حساب نطاق الصفحات لضمان التسلسل بعد أي حذف أو تبديل"""
     current = data['start_page']
     for p in data['readers']:
         start_p = current
@@ -45,7 +46,6 @@ def reorder_pages():
 
 def generate_main_markup(chat_id, user_id):
     markup = types.InlineKeyboardMarkup(row_width=2)
-    # دمج قارئة ومستمعة في زر "الحالة"
     markup.add(types.InlineKeyboardButton("🔄 اختيار الحالة (قارئة/مستمعة)", callback_data="choose_status"))
     
     if data['extra_allowed'] and data['is_open']:
@@ -112,18 +112,19 @@ def set_start_page(m):
         nums = ''.join(filter(str.isdigit, m.text))
         if nums:
             data['start_page'] = int(nums)
-            bot.send_message(m.chat.id, f"✅ تم ضبط البداية من ص {nums}\nكم صفحة لكل طالبة؟")
+            bot.send_message(m.chat.id, f"✅ تم ضبط البداية من ص {nums}\nكم صفحة لكل طالبة؟ (أرسلي الرقم فقط)")
             bot.register_next_step_handler(m, set_step)
 
 def set_step(m):
     if m.text.isdigit():
         data['page_step'] = int(m.text)
-        bot.send_message(m.chat.id, f"✅ تم الضبط: {m.text} صفحات.", reply_markup=generate_main_markup(m.chat.id, m.from_user.id))
+        bot.send_message(m.chat.id, f"✅ تم الضبط: {m.text} صفحات لكل طالبة.", reply_markup=generate_main_markup(m.chat.id, m.from_user.id))
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_buttons(call):
     uid, uname, cid = call.from_user.id, call.from_user.first_name, call.message.chat.id
     
+    # --- أوامر التسجيل والحالة ---
     if call.data == "choose_status":
         m = types.InlineKeyboardMarkup()
         m.add(types.InlineKeyboardButton("📖 تسجيل كقارئة", callback_data="reg_read"),
@@ -133,18 +134,58 @@ def handle_buttons(call):
         return
 
     elif call.data == "reg_read":
-        if any(p['id'] == uid for p in data['readers']): return
+        if any(p['id'] == uid for p in data['readers']): 
+            bot.answer_callback_query(call.id, "أنتِ مسجلة كقارئة بالفعل!")
+            return
         data['readers'].append({'id': uid, 'name': uname, 'done': False})
         reorder_pages()
         
     elif call.data == "reg_listen":
         if not any(p['id'] == uid for p in data['listeners']):
             data['listeners'].append({'id': uid, 'name': uname})
+        else:
+            bot.answer_callback_query(call.id, "أنتِ مسجلة كمستمعة بالفعل!")
 
+    elif call.data == "reg_extra":
+        data['readers'].append({'id': uid, 'name': f"{uname} (إضافي)", 'done': False})
+        reorder_pages()
+
+    # --- أوامر المستخدم العامة ---
+    elif call.data == "set_done":
+        found = False
+        for p in data['readers']:
+            if p['id'] == uid:
+                p['done'] = True
+                found = True
+        if found: bot.answer_callback_query(call.id, "تَقَبَّلَ اللَّهُ طَاعَتَكِ.")
+        else: bot.answer_callback_query(call.id, "يجب التسجيل كقارئة أولاً!", show_alert=True)
+
+    elif call.data == "user_del":
+        data['readers'] = [p for p in data['readers'] if p['id'] != uid]
+        data['listeners'] = [p for p in data['listeners'] if p['id'] != uid]
+        reorder_pages()
+        bot.answer_callback_query(call.id, "تم حذف اسمك وتعديل ترتيب القائمة.")
+
+    # --- أوامر المشرفات ---
     elif call.data == "admin_refresh":
         bot.delete_message(cid, call.message.message_id)
         bot.send_message(cid, build_report_text(), reply_markup=generate_main_markup(cid, uid))
         return
+
+    elif call.data == "admin_reset":
+        if is_user_admin(cid, uid):
+            data['readers'], data['listeners'] = [], []
+            bot.answer_callback_query(call.id, "تم تصفير القائمة تماماً.")
+
+    elif call.data == "admin_report":
+        if is_user_admin(cid, uid):
+            done = [p['name'] for p in data['readers'] if p['done']]
+            rep = "🏆 **تَقْرِيرُ مَجْلِسِ اليَوْم** 🏆\n\nنِسَاءٌ مُبَارَكَاتٌ أَتْمَمْنَ القِرَاءَةَ:\n" + ("\n".join(done) if done else "لا يوجد بعد")
+            bot.send_message(cid, rep)
+            return
+
+    elif call.data == "admin_remind":
+        bot.send_message(cid, "🔔 هَلُمُّوا إِلَى مَجْلِسٍ تَحُفُّنَا فِيهِ المَلَائِكَةُ 🌿")
 
     elif call.data == "admin_swap_panel":
         if is_user_admin(cid, uid):
@@ -171,19 +212,35 @@ def handle_buttons(call):
         data['readers'][idx1], data['readers'][idx2] = data['readers'][idx2], data['readers'][idx1]
         reorder_pages()
         data['swap_temp'] = None
-        bot.answer_callback_query(call.id, "✅ تم تبديل الأدوار وتنسيق الأوجه.")
+        bot.answer_callback_query(call.id, "تم التبديل بنجاح.")
 
-    elif call.data == "user_del":
-        data['readers'] = [p for p in data['readers'] if p['id'] != uid]
-        data['listeners'] = [p for p in data['listeners'] if p['id'] != uid]
+    elif call.data == "admin_del_panel":
+        if is_user_admin(cid, uid):
+            del_m = types.InlineKeyboardMarkup()
+            for p in data['readers']:
+                del_m.add(types.InlineKeyboardButton(f"🗑️ {p['name']}", callback_data=f"del_{p['id']}"))
+            del_m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back"))
+            bot.edit_message_text("لوحة الحذف (تعديل الأوجه آلي):", cid, call.message.message_id, reply_markup=del_m)
+            return
+
+    elif call.data.startswith("del_"):
+        target_id = int(call.data.split("_")[1])
+        data['readers'] = [p for p in data['readers'] if p['id'] != target_id]
         reorder_pages()
+        bot.answer_callback_query(call.id, "تم الحذف.")
 
-    elif call.data == "admin_remind":
-        bot.send_message(cid, "🔔 هَلُمُّوا إِلَى مَجْلِسٍ تَحُفُّنَا فِيهِ المَلَائِكَةُ 🌿")
+    elif call.data == "toggle_lock":
+        if is_user_admin(cid, uid): data['is_open'] = not data['is_open']
+
+    elif call.data == "toggle_extra":
+        if is_user_admin(cid, uid): data['extra_allowed'] = not data['extra_allowed']
 
     elif call.data == "back": pass
 
-    bot.edit_message_text(build_report_text(), cid, call.message.message_id, reply_markup=generate_main_markup(cid, uid))
+    # تحديث الرسالة بعد أي عملية
+    try:
+        bot.edit_message_text(build_report_text(), cid, call.message.message_id, reply_markup=generate_main_markup(cid, uid))
+    except: pass
 
 if __name__ == "__main__":
     keep_alive()
