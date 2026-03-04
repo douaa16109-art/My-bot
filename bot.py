@@ -151,17 +151,12 @@ def handle_buttons(call):
 
     elif call.data == "admin_remind":
         if is_user_admin(cid, uid):
-            mentions = ""
-            for p in data['readers']:
-                if not p['done']:
-                    mentions += f"[{p['name']}](tg://user?id={p['id']}) "
-            
-            # العبارة التي طلبتِها حصراً مع منشن لمن لم تسجل
-            msg = f"🔔 هَلُمُّوا إِلَى مَجْلِسٍ تَحُفُّنَا فِيهِ المَلَائِكَةُ 🌿\n\n"
-            if mentions:
-                msg += f"ننتظر إتمامكن للورد القراءاتي:\n{mentions}\n\n"
-            msg += "⚠️ وتذكير لمن لم تسجل اسمها بعد؛ سارعي بالحجز والمشاركة."
-            bot.send_message(cid, msg, parse_mode="Markdown")
+            # تم تعديل هذا الجزء ليكون تنبيهاً عاماً يصل للجميع
+            # العبارة التي طلبتِها
+            msg = "🔔 هَلُمُّوا إِلَى مَجْلِسٍ تَحُفُّنَا فِيهِ المَلَائِكَةُ 🌿\n\n"
+            msg += "تذكير عام لكل الأخوات في المجموعة بالمشاركة أو إتمام الورد."
+            # إرسال التنبيه
+            bot.send_message(cid, msg)
 
     elif call.data == "toggle_lock":
         if is_user_admin(cid, uid): data['is_open'] = not data['is_open']
