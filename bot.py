@@ -22,12 +22,12 @@ data = {
     'listeners': [], 
     'current_page': 0,
     'is_open': True,
-    'extra_allowed': False, # خيار الأدوار الإضافية
+    'extra_allowed': False,
     'page_step': 2 
 }
 
 def is_user_admin(chat_id, user_id):
-    if chat_id > 0: return True # في الخاص المشرف هو المستخدم
+    if chat_id > 0: return True 
     try:
         member = bot.get_chat_member(chat_id, user_id)
         return member.status in ['administrator', 'creator']
@@ -40,7 +40,6 @@ def generate_main_markup(chat_id, user_id):
         types.InlineKeyboardButton("🎧 تسجيل كمستمعة", callback_data="reg_listen")
     )
     
-    # زر الدور الإضافي (يظهر فقط إذا فعلته المشرفة)
     if data['extra_allowed'] and data['is_open']:
         markup.add(types.InlineKeyboardButton("➕ تسجيل دور إضافي", callback_data="reg_extra"))
         
@@ -55,7 +54,7 @@ def generate_main_markup(chat_id, user_id):
             types.InlineKeyboardButton("🔔 تنبيه المتأخرات", callback_data="admin_remind")
         )
         lock_text = "🔓 فتح التسجيل" if not data['is_open'] else "🔒 إغلاق التسجيل"
-        extra_text = "🚫 منع الأدوار الإضافية" if data['extra_allowed'] else "✨ تفعيل الأدوار الإضافية"
+        extra_text = "🚫 منع الأدوار الإضافية" if data['extra_allowed'] else "🌿 تفعيل الأدوار الإضافية"
         
         markup.add(types.InlineKeyboardButton(lock_text, callback_data="toggle_lock"))
         markup.add(types.InlineKeyboardButton(extra_text, callback_data="toggle_extra"))
@@ -86,16 +85,13 @@ def build_report_text():
     if not data['listeners']: text += "لا يوجد..\n"
     else:
         for i, p in enumerate(data['listeners'], 1):
-            text += f"{i}- {p['name']} ✨\n"
+            text += f"{i}- {p['name']} 🌿\n"
             
     return text
 
 @bot.message_handler(commands=['start'])
 def start_bot(m):
-    if is_user_admin(m.chat.id, m.from_user.id):
-        bot.send_message(m.chat.id, "مرحباً بكِ يا مشرفة الحلقة.", reply_markup=generate_main_markup(m.chat.id, m.from_user.id))
-    else:
-        bot.reply_to(m, "⚠️ عذراً، هذا الأمر مخصص للمشرفات فقط لإدارة المجلس.")
+    bot.send_message(m.chat.id, "مرحباً بكِ في مَجْلِسِ التِّلَاوَةِ.", reply_markup=generate_main_markup(m.chat.id, m.from_user.id))
 
 @bot.message_handler(func=lambda m: "بداية الوجه" in m.text)
 def set_start_page(m):
@@ -119,17 +115,15 @@ def handle_buttons(call):
         bot.answer_callback_query(call.id, "⚠️ القائمة مغلقة حالياً.", show_alert=True)
         return
 
-    # تسجيل كقارئة (مرة واحدة فقط)
     if call.data == "reg_read":
         if any(p['id'] == uid for p in data['readers']):
-            bot.answer_callback_query(call.id, "أنتِ مسجلة بالفعل! استخدمي 'دور إضافي' إذا سمحت المشرفة.")
+            bot.answer_callback_query(call.id, "أنتِ مسجلة بالفعل!")
             return
         start_p = data['current_page']
         end_p = start_p + (data['page_step'] - 1)
         data['readers'].append({'id': uid, 'name': uname, 'range': f"{start_p}-{end_p}", 'done': False})
         data['current_page'] = end_p + 1
         
-    # تسجيل دور إضافي (يسمح بالتكرار)
     elif call.data == "reg_extra":
         if not data['extra_allowed']: return
         start_p = data['current_page']
@@ -144,6 +138,11 @@ def handle_buttons(call):
     elif call.data == "set_done":
         for p in data['readers']:
             if p['id'] == uid: p['done'] = True
+
+    elif call.data == "user_del":
+        data['readers'] = [p for p in data['readers'] if p['id'] != uid]
+        data['listeners'] = [p for p in data['listeners'] if p['id'] != uid]
+        bot.answer_callback_query(call.id, "✅ تم حذف اسمكِ من القائمة.")
             
     elif call.data == "admin_reset":
         if is_user_admin(cid, uid):
@@ -158,7 +157,8 @@ def handle_buttons(call):
                     mentions += f"[{p['name']}](tg://user?id={p['id']}) "
             
             if mentions:
-                msg = f"🔔 هَلُمُّوا إِلَى مَجْلِسٍ تَحُفُّنَا فِيهِ المَلَائِكَةُ ✨\n\nننتظر إتمامكن للورد القراءاتي:\n{mentions}"
+                # تم استبدال النجوم بـ 🌿
+                msg = f"🔔 هَلُمُّوا إِلَى مَجْلِسٍ تَحُفُّنَا فِيهِ المَلَائِكَةُ 🌿\n\nننتظر إتمامكن للورد القراءاتي:\n{mentions}"
                 bot.send_message(cid, msg, parse_mode="Markdown")
             else:
                 bot.answer_callback_query(call.id, "ما شاء الله، الجميع أتم!")
@@ -172,17 +172,26 @@ def handle_buttons(call):
     elif call.data == "admin_report":
         if is_user_admin(cid, uid):
             done = [p['name'] for p in data['readers'] if p['done']]
-            rep = "🏆 **تَقْرِيرُ مَجْلِسِ اليَوْم** 🏆\n\nنِسَاءٌ مُبَارَكَاتٌ أَتْمَمْنَ القِرَاءَةَ:\n" + "\n".join(done)
+            rep = "🏆 **تَقْرِيرُ مَجْلِسِ اليَوْم** 🏆\n\nنِسَاءٌ مُبَارَكَاتٌ أَتْمَمْنَ القِرَاءَةَ:\n" + ("\n".join(done) if done else "لا يوجد بعد")
             bot.send_message(cid, rep)
 
     elif call.data == "admin_del_panel":
         if is_user_admin(cid, uid):
             del_m = types.InlineKeyboardMarkup()
-            for p in data['readers'] + data['listeners']:
+            for p in data['readers']:
                 del_m.add(types.InlineKeyboardButton(f"🗑️ {p['name']}", callback_data=f"del_{p['id']}"))
+            for p in data['listeners']:
+                del_m.add(types.InlineKeyboardButton(f"🎧 {p['name']}", callback_data=f"del_{p['id']}"))
             del_m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back"))
             bot.edit_message_text("لوحة حذف الأسماء (للمشرفات):", cid, call.message.message_id, reply_markup=del_m)
             return
+
+    elif call.data.startswith("del_"):
+        if is_user_admin(cid, uid):
+            target_id = int(call.data.split("_")[1])
+            data['readers'] = [p for p in data['readers'] if p['id'] != target_id]
+            data['listeners'] = [p for p in data['listeners'] if p['id'] != target_id]
+            bot.answer_callback_query(call.id, "تم الحذف بنجاح.")
 
     bot.edit_message_text(build_report_text(), cid, call.message.message_id, reply_markup=generate_main_markup(cid, uid))
 
