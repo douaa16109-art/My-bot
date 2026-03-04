@@ -157,7 +157,6 @@ def handle_buttons(call):
                     mentions += f"[{p['name']}](tg://user?id={p['id']}) "
             
             if mentions:
-                # تم استبدال النجوم بـ 🌿
                 msg = f"🔔 هَلُمُّوا إِلَى مَجْلِسٍ تَحُفُّنَا فِيهِ المَلَائِكَةُ 🌿\n\nننتظر إتمامكن للورد القراءاتي:\n{mentions}"
                 bot.send_message(cid, msg, parse_mode="Markdown")
             else:
