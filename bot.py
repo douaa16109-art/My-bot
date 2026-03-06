@@ -35,16 +35,16 @@ def generate_markup(chat_id, user_id):
     markup = types.InlineKeyboardMarkup(row_width=2)
     
     # أزرار العضوات (تظهر للجميع)
-    markup.add(types.InlineKeyboardButton("🔄 اختيار الحالة (قارئة/مستمعة)", callback_data="choose_status"))
+    markup.add(types.InlineKeyboardButton("🔄 اختيار الحالة", callback_data="choose_status"))
     markup.add(
         types.InlineKeyboardButton("✅ أتممت القراءة", callback_data="set_done"),
         types.InlineKeyboardButton("🗑️ حذف اسمي فقط", callback_data="user_del_self")
     )
     
-    # أزرار المشرفات (تظهر للمشرفة فقط في نسختها من الرسالة)
+    # أزرار المشرفات (مخفية تماماً عن العضوات)
     if is_user_admin(chat_id, user_id):
-        markup.add(types.InlineKeyboardButton("🔃 تحديث القائمة", callback_data="admin_refresh"))
-        markup.add(types.InlineKeyboardButton("📖 تغيير السورة", callback_data="admin_set_surah"))
+        markup.add(types.InlineKeyboardButton("🔃 تحديث القائمة", callback_data="admin_refresh"),
+                   types.InlineKeyboardButton("📖 تغيير السورة", callback_data="admin_set_surah"))
         lock_text = "🔓 فتح التسجيل" if not data['is_open'] else "🔒 إغلاق التسجيل"
         markup.add(types.InlineKeyboardButton(lock_text, callback_data="toggle_lock"),
                    types.InlineKeyboardButton("🧨 تصفير القائمة", callback_data="admin_reset"))
@@ -60,10 +60,11 @@ def build_report_text():
     text += f"حالة القائمة الآن: {status}\n"
     text += "━━━━━━━━━━━━━\n\n"
     
-    # عنوان السورة فوق القائمة مباشرة
+    # --- التعديل هنا: السورة فوق القارئات مباشرة ---
     text += f"📍 **السُّورَةُ الحَالِيَّةُ:** {data['current_surah']}\n"
     text += "📖 **قائمة القارئات:**\n"
-    
+    # ----------------------------------------------
+
     if not data['readers']: text += "لا يوجد مسجلات بعد..\n"
     else:
         for i, p in enumerate(data['readers'], 1):
@@ -92,7 +93,7 @@ def save_surah_and_send_list(m):
 def handle_buttons(call):
     uid, uname, cid = call.from_user.id, call.from_user.first_name, call.message.chat.id
     
-    # حماية الأوامر الإدارية
+    # منع العضوات من استخدام أزرار المشرفات
     admin_cmds = ["admin_set_surah", "admin_refresh", "admin_reset", "toggle_lock"]
     if call.data in admin_cmds and not is_user_admin(cid, uid):
         bot.answer_callback_query(call.id, "عذراً، هذا الزر للمشرفات فقط! ❌", show_alert=True)
@@ -101,14 +102,12 @@ def handle_buttons(call):
     if call.data == "admin_set_surah":
         msg = bot.send_message(cid, "📝 أرسلي اسم السورة الجديدة:")
         bot.register_next_step_handler(msg, save_surah_and_send_list)
-        return
 
     elif call.data == "choose_status":
         m = types.InlineKeyboardMarkup()
         m.add(types.InlineKeyboardButton("📖 تسجيل كقارئة", callback_data="reg_read"),
               types.InlineKeyboardButton("🎧 تسجيل كمستمعة", callback_data="reg_listen"))
-        bot.edit_message_text("اختاري حالتكِ:", cid, call.message.message_id, reply_markup=m)
-        return
+        bot.edit_message_text("اختاري حالتكِ في المجلس:", cid, call.message.message_id, reply_markup=m)
 
     elif call.data == "reg_read":
         if not any(p['id'] == uid for p in data['readers']):
@@ -121,22 +120,25 @@ def handle_buttons(call):
     elif call.data == "set_done":
         for p in data['readers']:
             if p['id'] == uid: p['done'] = True
-        bot.answer_callback_query(call.id, "تَقَبَّلَ اللَّهُ طَاعَتَكِ ✅", show_alert=True)
+        bot.answer_callback_query(call.id, "تَقَبَّلَ اللَّهُ طَاعَتَكِ ✅\n\n«سُبْحَانَكَ اللَّهُمَّ وَبِحَمْدِكَ، أَشْهَدُ أَنْ لَا إِلَهَ إِلَّا أَنْتَ، أَسْتَغْفِرُكَ وَأَتُوبُ إِلَيْكَ».", show_alert=True)
 
     elif call.data == "user_del_self":
-        # حذف المستخدم نفسه فقط بناءً على الـ ID
+        # حذف الشخص الذي ضغط فقط
         data['readers'] = [p for p in data['readers'] if p['id'] != uid]
         data['listeners'] = [p for p in data['listeners'] if p['id'] != uid]
-        bot.answer_callback_query(call.id, "تم حذف اسمك من القائمة.")
+        bot.answer_callback_query(call.id, "تم حذف اسمكِ بنجاح.")
 
     elif call.data == "admin_reset":
         data['readers'], data['listeners'] = [], []
-        bot.answer_callback_query(call.id, "تم تصفير القائمة بنجاح.")
+        bot.answer_callback_query(call.id, "تم تصفير القائمة.")
 
     elif call.data == "toggle_lock":
         data['is_open'] = not data['is_open']
 
-    # تحديث القائمة مع مراعاة نوع المستخدم في الأزرار
+    elif call.data == "admin_refresh":
+        bot.delete_message(cid, call.message.message_id)
+        bot.send_message(cid, build_report_text(), reply_markup=generate_markup(cid, uid))
+
     try:
         bot.edit_message_text(build_report_text(), cid, call.message.message_id, reply_markup=generate_markup(cid, uid))
     except: pass
