@@ -3,7 +3,7 @@ from telebot import types
 from flask import Flask
 from threading import Thread
 
-# --- إعداد السيرفر لضمان العمل 24 ساعة ---
+# --- السيرفر لضمان العمل 24 ساعة ---
 app = Flask('')
 @app.route('/')
 def home(): return "Bot is running!"
@@ -20,7 +20,8 @@ bot = telebot.TeleBot(TOKEN)
 data = {
     'readers': [], 
     'listeners': [], 
-    'is_open': True
+    'is_open': True,
+    'current_surah': "لم تحدد بعد"
 }
 
 def is_user_admin(chat_id, user_id):
@@ -32,15 +33,18 @@ def is_user_admin(chat_id, user_id):
 
 def generate_main_markup(chat_id, user_id):
     markup = types.InlineKeyboardMarkup(row_width=2)
+    # أزرار العضوات
     markup.add(types.InlineKeyboardButton("🔄 اختيار الحالة (قارئة/مستمعة)", callback_data="choose_status"))
-    
     markup.add(
         types.InlineKeyboardButton("✅ أتممت القراءة", callback_data="set_done"),
         types.InlineKeyboardButton("🗑️ حذف اسمي", callback_data="user_del")
     )
     
+    # أزرار المشرفات (تظهر لهن فقط)
     if is_user_admin(chat_id, user_id):
         markup.add(types.InlineKeyboardButton("🔃 تحديث القائمة", callback_data="admin_refresh"))
+        markup.add(types.InlineKeyboardButton("📖 تغيير السورة", callback_data="admin_set_surah"))
+        
         lock_text = "🔓 فتح التسجيل" if not data['is_open'] else "🔒 إغلاق التسجيل"
         markup.add(types.InlineKeyboardButton(lock_text, callback_data="toggle_lock"),
                    types.InlineKeyboardButton("🧨 تصفير القائمة", callback_data="admin_reset"))
@@ -50,11 +54,11 @@ def generate_main_markup(chat_id, user_id):
 
 def build_report_text():
     status = "✅ مفتوحة" if data['is_open'] else "❌ مغلقة"
-    
-    # النص المختصر والمعدل كما طلبتِ
     text = "❄ **بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ** ❄\n"
     text += "🌿 **مَجْلِسُ تِلَاوَةِ القُرْآنِ الكَرِيمِ** 🌿\n\n"
-    text += "📖 **اعْلَمِي رَعَاكِ اللهُ؛** أنَّ حُضوركِ لهذا المجلسِ ليس بجهدكِ ولا باختياركِ، بل هو محضُ توفيقٍ واصطفاءٍ من ربّكِ.. فكم من محرومٍ والقرآنُ بين يديه، وكم من مُوفّقٍ يُساقُ الخيرُ إليه!\n\n"
+    text += f"📍 **السُّورَةُ الحَالِيَّةُ:** {data['current_surah']}\n"
+    text += "━━━━━━━━━━━━━\n\n"
+    text += "📖 **اعْلَمِي رَعَاكِ اللهُ؛** أنَّ حُضوركِ لهذا المجلسِ محضُ توفيقٍ واصطفاءٍ من ربّكِ.. فكم من محرومٍ والقرآنُ بين يديه، وكم من مُوفّقٍ يُساقُ الخيرُ إليه!\n\n"
     text += "━━━━━━━━━━━━━\n"
     text += f"حالة القائمة الآن: {status}\n"
     text += "━━━━━━━━━━━━━\n\n"
@@ -76,13 +80,29 @@ def build_report_text():
 
 @bot.message_handler(commands=['start'])
 def start_bot(m):
+    # التحقق: إذا لم يكن مشرفاً، البوت لن يستجيب ولن يرسل شيئاً
+    if not is_user_admin(m.chat.id, m.from_user.id):
+        return # تجاهل تام للعضوات العاديات عند إرسال /start
+
+    # للمشرفات فقط: يطلب السورة ثم يرسل القائمة
+    msg = bot.send_message(m.chat.id, "مرحباً بكِ أيتها المشرفة.. 📝 ما هي السورة الحالية؟")
+    bot.register_next_step_handler(msg, save_surah_and_send_list)
+
+def save_surah_and_send_list(m):
+    data['current_surah'] = m.text
     bot.send_message(m.chat.id, build_report_text(), reply_markup=generate_main_markup(m.chat.id, m.from_user.id))
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_buttons(call):
     uid, uname, cid = call.from_user.id, call.from_user.first_name, call.message.chat.id
     
-    if call.data == "choose_status":
+    if call.data == "admin_set_surah":
+        if is_user_admin(cid, uid):
+            msg = bot.send_message(cid, "📝 أرسلي اسم السورة الجديدة:")
+            bot.register_next_step_handler(msg, save_surah_and_send_list)
+        return
+
+    elif call.data == "choose_status":
         m = types.InlineKeyboardMarkup()
         m.add(types.InlineKeyboardButton("📖 تسجيل كقارئة", callback_data="reg_read"),
               types.InlineKeyboardButton("🎧 تسجيل كمستمعة", callback_data="reg_listen"))
@@ -91,10 +111,16 @@ def handle_buttons(call):
         return
 
     elif call.data == "reg_read":
+        if not data['is_open']:
+            bot.answer_callback_query(call.id, "عذراً، التسجيل مغلق حالياً!")
+            return
         if not any(p['id'] == uid for p in data['readers']):
             data['readers'].append({'id': uid, 'name': uname, 'done': False})
         
     elif call.data == "reg_listen":
+        if not data['is_open']:
+            bot.answer_callback_query(call.id, "عذراً، التسجيل مغلق حالياً!")
+            return
         if not any(p['id'] == uid for p in data['listeners']):
             data['listeners'].append({'id': uid, 'name': uname})
 
@@ -104,19 +130,14 @@ def handle_buttons(call):
             if p['id'] == uid:
                 p['done'] = True
                 found = True
-        
         if found:
-            # التنبيه العلوي مع الأذكار المضبوطة بالشكل
-            alert_text = "تَقَبَّلَ اللَّهُ طَاعَتَكِ ✅\n\n"
-            alert_text += "لا تنسي قول: «سُبْحَانَكَ اللَّهُمَّ وَبِحَمْدِكَ، أَشْهَدُ أَنْ لَا إِلَهَ إِلَّا أَنْتَ، أَسْتَغْفِرُكَ وَأَتُوبُ إِلَيْكَ».\n\n"
-            alert_text += "اللَّهُمَّ اجْعَلْنَا مِنْ أَهْلِ القُرْآنِ الَّذِينَ هُمْ أَهْلُكَ وَخَاصَّتُكَ."
+            alert_text = "تَقَبَّلَ اللَّهُ طَاعَتَكِ ✅\n\n«سُبْحَانَكَ اللَّهُمَّ وَبِحَمْدِكَ، أَشْهَدُ أَنْ لَا إِلَهَ إِلَّا أَنْتَ، أَسْتَغْفِرُكَ وَأَتُوبُ إِلَيْكَ»."
             bot.answer_callback_query(call.id, alert_text, show_alert=True)
-        else:
-            bot.answer_callback_query(call.id, "يجب التسجيل أولاً!")
 
     elif call.data == "admin_refresh":
-        bot.delete_message(cid, call.message.message_id)
-        bot.send_message(cid, build_report_text(), reply_markup=generate_main_markup(cid, uid))
+        if is_user_admin(cid, uid):
+            bot.delete_message(cid, call.message.message_id)
+            bot.send_message(cid, build_report_text(), reply_markup=generate_main_markup(cid, uid))
         return
 
     elif call.data == "admin_reset":
@@ -137,12 +158,13 @@ def handle_buttons(call):
             for p in data['readers']:
                 del_m.add(types.InlineKeyboardButton(f"🗑️ {p['name']}", callback_data=f"del_{p['id']}"))
             del_m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back"))
-            bot.edit_message_text("لوحة الحذف:", cid, call.message.message_id, reply_markup=del_m)
+            bot.edit_message_text("لوحة الحذف للمشرفات فقط:", cid, call.message.message_id, reply_markup=del_m)
             return
 
     elif call.data.startswith("del_"):
-        target_id = int(call.data.split("_")[1])
-        data['readers'] = [p for p in data['readers'] if p['id'] != target_id]
+        if is_user_admin(cid, uid):
+            target_id = int(call.data.split("_")[1])
+            data['readers'] = [p for p in data['readers'] if p['id'] != target_id]
 
     try:
         bot.edit_message_text(build_report_text(), cid, call.message.message_id, reply_markup=generate_main_markup(cid, uid))
