@@ -16,11 +16,10 @@ def keep_alive():
 TOKEN = '8753124430:AAFrkVk2xu8FlIdZYhYKXziJxlHY_We3v7Q'
 bot = telebot.TeleBot(TOKEN)
 
-# ذاكرة البوت
+# ذاكرة البوت المبسطة
 data = {
     'readers': [], 
     'listeners': [], 
-    'header_text': "❄ بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ ❄\n🌿 مَجْلِسُ تِلَاوَةِ القُرْآنِ الكَرِيمِ 🌿",
     'is_open': True
 }
 
@@ -41,30 +40,27 @@ def generate_main_markup(chat_id, user_id):
     )
     
     if is_user_admin(chat_id, user_id):
-        markup.add(
-            types.InlineKeyboardButton("📊 تقرير الختام", callback_data="admin_report"),
-            types.InlineKeyboardButton("🔃 تحديث القائمة", callback_data="admin_refresh")
-        )
-        markup.add(
-            types.InlineKeyboardButton("✍️ تعديل نص المجلس", callback_data="admin_edit_header"),
-            types.InlineKeyboardButton("🧨 تصفير القائمة", callback_data="admin_reset")
-        )
-        
+        markup.add(types.InlineKeyboardButton("🔃 تحديث القائمة", callback_data="admin_refresh"))
         lock_text = "🔓 فتح التسجيل" if not data['is_open'] else "🔒 إغلاق التسجيل"
         markup.add(types.InlineKeyboardButton(lock_text, callback_data="toggle_lock"),
-                   types.InlineKeyboardButton("⚙️ لوحة الحذف", callback_data="admin_del_panel"))
+                   types.InlineKeyboardButton("🧨 تصفير القائمة", callback_data="admin_reset"))
+        markup.add(types.InlineKeyboardButton("⚙️ لوحة الحذف", callback_data="admin_del_panel"))
         
     return markup
 
 def build_report_text():
     status = "✅ مفتوحة" if data['is_open'] else "❌ مغلقة"
-    text = f"{data['header_text']}\n"
-    text += f"━━━━━━━━━━━━━\n"
-    text += f"حالة القائمة: {status}\n"
-    text += f"━━━━━━━━━━━━━\n\n"
+    # النص السجعي المحفز في الأعلى
+    text = "📖 **\"وَفِي ذَٰلِكَ فَلْيَتَنَافَسِ الْمُتَنَافِسُونَ\"**\n\n"
+    text += "✨ **اعْلَمِي رَحِمَكِ اللهُ؛** أنَّ الإقبالَ على الخيرِ غنيمة، وفي رياضِ القرآنِ طمأنينة..\n"
+    text += "✨ **اعْلَمِي وَفَّقَكِ اللهُ؛** أنَّ المسارعةَ لنيلِ الأجورِ فوزٌ، ومجالسَ العلمِ والنورِ كنزٌ..\n"
+    text += "✨ **اعْلَمِي رَعَاكِ اللهُ؛** أنَّ حُضوركِ للمجلسِ محضُ توفيقٍ واصطفاءٍ من ربّكِ، فكم من محرومٍ والقرآنُ بين يديه، وكم من مُوفّقٍ يُساقُ الخيرُ إليه!\n\n"
+    text += "━━━━━━━━━━━━━\n"
+    text += f"حالة القائمة الآن: {status}\n"
+    text += "━━━━━━━━━━━━━\n\n"
     
     text += "📖 **قائمة القارئات:**\n"
-    if not data['readers']: text += "لا يوجد مسجلات..\n"
+    if not data['readers']: text += "لا يوجد مسجلات بعد..\n"
     else:
         for i, p in enumerate(data['readers'], 1):
             icon = "✅" if p['done'] else "⏳"
@@ -86,19 +82,12 @@ def start_bot(m):
 def handle_buttons(call):
     uid, uname, cid = call.from_user.id, call.from_user.first_name, call.message.chat.id
     
-    if call.data == "admin_edit_header":
-        if is_user_admin(cid, uid):
-            # يرسل النص الحالي للمشرفة لتقوم بتعديله
-            msg = bot.send_message(cid, f"النص الحالي هو:\n\n`{data['header_text']}`\n\nانسخي النص أعلاه، عدليه، ثم أرسليه هنا كرسالة جديدة.", parse_mode="Markdown")
-            bot.register_next_step_handler(msg, update_header)
-        return
-
-    elif call.data == "choose_status":
+    if call.data == "choose_status":
         m = types.InlineKeyboardMarkup()
         m.add(types.InlineKeyboardButton("📖 تسجيل كقارئة", callback_data="reg_read"),
               types.InlineKeyboardButton("🎧 تسجيل كمستمعة", callback_data="reg_listen"))
         m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back"))
-        bot.edit_message_text("اختاري حالتكِ:", cid, call.message.message_id, reply_markup=m)
+        bot.edit_message_text("اختاري حالتكِ في المجلس:", cid, call.message.message_id, reply_markup=m)
         return
 
     elif call.data == "reg_read":
@@ -110,9 +99,20 @@ def handle_buttons(call):
             data['listeners'].append({'id': uid, 'name': uname})
 
     elif call.data == "set_done":
+        found = False
         for p in data['readers']:
-            if p['id'] == uid: p['done'] = True
-        bot.answer_callback_query(call.id, "تَقَبَّلَ اللَّهُ طَاعَتَكِ ✅")
+            if p['id'] == uid:
+                p['done'] = True
+                found = True
+        
+        if found:
+            # الإشعار العلوي مع الذكر كما طلبتِ بالضبط
+            alert_text = "تَقَبَّلَ اللَّهُ طَاعَتَكِ ✅\n\n"
+            alert_text += "لا تنسي قول: «سُبْحَانَكَ اللَّهُمَّ وَبِحَمْدِكَ، أَشْهَدُ أَنْ لَا إِلَهَ إِلَّا أَنْتَ، أَسْتَغْفِرُكَ وَأَتُوبُ إِلَيْكَ».\n"
+            alert_text += "اللَّهُمَّ اجْعَلْنَا مِنْ أَهْلِ القُرْآنِ الَّذِينَ هُمْ أَهْلُكَ وَخَاصَّتُكَ."
+            bot.answer_callback_query(call.id, alert_text, show_alert=True)
+        else:
+            bot.answer_callback_query(call.id, "يجب التسجيل أولاً!")
 
     elif call.data == "admin_refresh":
         bot.delete_message(cid, call.message.message_id)
@@ -131,14 +131,22 @@ def handle_buttons(call):
     elif call.data == "toggle_lock":
         if is_user_admin(cid, uid): data['is_open'] = not data['is_open']
 
+    elif call.data == "admin_del_panel":
+        if is_user_admin(cid, uid):
+            del_m = types.InlineKeyboardMarkup()
+            for p in data['readers']:
+                del_m.add(types.InlineKeyboardButton(f"🗑️ {p['name']}", callback_data=f"del_{p['id']}"))
+            del_m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back"))
+            bot.edit_message_text("لوحة الحذف:", cid, call.message.message_id, reply_markup=del_m)
+            return
+
+    elif call.data.startswith("del_"):
+        target_id = int(call.data.split("_")[1])
+        data['readers'] = [p for p in data['readers'] if p['id'] != target_id]
+
     try:
         bot.edit_message_text(build_report_text(), cid, call.message.message_id, reply_markup=generate_main_markup(cid, uid))
     except: pass
-
-def update_header(m):
-    # اعتماد النص الجديد بالكامل من المشرفة
-    data['header_text'] = m.text
-    bot.send_message(m.chat.id, "✅ تم تحديث واجهة المجلس بنجاح.", reply_markup=generate_main_markup(m.chat.id, m.from_user.id))
 
 if __name__ == "__main__":
     keep_alive()
