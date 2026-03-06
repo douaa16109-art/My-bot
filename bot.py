@@ -48,26 +48,36 @@ def generate_markup(chat_id, user_id):
 
 def build_report_text():
     status = "✅ مفتوحة" if data['is_open'] else "❌ مغلقة"
+    
     text = "❄ **بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ** ❄\n"
     text += "🌿 **مَجْلِسُ تِلَاوَةِ القُرْآنِ الكَرِيمِ** 🌿\n\n"
-    text += "📖 **اعْلَمِي رَعَاكِ اللهُ؛** أنَّ حُضوركِ لهذا المجلسِ محضُ توفيقٍ واصطفاءٍ من ربّكِ..\n"
+    
+    # ميزة الاقتباس للعبارة العلوية
+    text += "> 📖 **اعْلَمِي رَعَاكِ اللهُ؛** أنَّ حُضوركِ لهذا المجلسِ محضُ توفيقٍ واصطفاءٍ من ربّكِ.. فكم من محرومٍ والقرآنُ بين يديه، وكم من مُوفّقٍ يُساقُ الخيرُ إليه!\n\n"
+    
     text += "━━━━━━━━━━━━━\n"
     text += f"حالة القائمة الآن: {status}\n"
     text += "━━━━━━━━━━━━━\n\n"
     
-    text += f"📍 **السُّورَةُ الحَالِيَّةُ:** {data['current_surah']}\n"
+    # السورة الحالية بخط عريض
+    text += f"📍 **السُّورَةُ الحَالِيَّةُ: {data['current_surah']}**\n"
     text += "━━━━━━━━━━━━━\n\n"
     
+    # قائمة القارئات بورد التوليب وخط عريض
     text += "🌷 **قَائِمَةُ القَارِئَاتِ** 🌷\n"
-    if not data['readers']: text += "لا يوجد مسجلات بعد..\n"
+    if not data['readers']: 
+        text += "لا يوجد مسجلات بعد..\n"
     else:
         for i, p in enumerate(data['readers'], 1):
             icon = "✅" if p['done'] else "⏳"
             text += f"{i}- {p['name']} {icon}\n"
             
     text += "\n━━━━━━━━━━━━━\n"
+    
+    # قائمة المستمعات
     text += "🌷 **المُسْتَمِعَاتُ** 🌷\n"
-    if not data['listeners']: text += "لا يوجد..\n"
+    if not data['listeners']: 
+        text += "لا يوجد..\n"
     else:
         for i, p in enumerate(data['listeners'], 1):
             text += f"{i}- {p['name']} 🌿\n"
@@ -76,13 +86,14 @@ def build_report_text():
 
 @bot.message_handler(commands=['start'])
 def start_bot(m):
-    if not is_user_admin(m.chat.id, m.from_user.id): return 
+    if not is_user_admin(m.chat.id, m.from_user.id): 
+        return 
     msg = bot.send_message(m.chat.id, "📝 أهلاً بكِ أيتها المشرفة.. ما هي السورة الحالية؟")
     bot.register_next_step_handler(msg, save_surah_and_send_list)
 
 def save_surah_and_send_list(m):
     data['current_surah'] = m.text
-    bot.send_message(m.chat.id, build_report_text(), reply_markup=generate_markup(m.chat.id, m.from_user.id))
+    bot.send_message(m.chat.id, build_report_text(), parse_mode="MarkdownV2", reply_markup=generate_markup(m.chat.id, m.from_user.id))
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_buttons(call):
@@ -111,7 +122,7 @@ def handle_buttons(call):
     elif call.data == "set_done":
         for p in data['readers']:
             if p['id'] == uid: p['done'] = True
-        bot.answer_callback_query(call.id, "تَقَبَّلَ اللَّهُ طَاعَتَكِ ✅\n\n«سُبْحَانَكَ اللَّهُمَّ وَبِحَمْدِكَ، أَشْهَدُ أَنْ لَا إِلَهَ إِلَّا أَنْتَ، أَسْتَغْفِرُكَ وَأَتُوبُ إِلَيْكَ».", show_alert=True)
+        bot.answer_callback_query(call.id, "تَقَبَّلَ اللَّهُ طَاعَتَكِ ✅", show_alert=True)
 
     elif call.data == "user_del_self":
         data['readers'] = [p for p in data['readers'] if p['id'] != uid]
@@ -127,11 +138,12 @@ def handle_buttons(call):
 
     elif call.data == "admin_refresh" and is_user_admin(cid, uid):
         bot.delete_message(cid, call.message.message_id)
-        bot.send_message(cid, build_report_text(), reply_markup=generate_markup(cid, uid))
+        bot.send_message(cid, build_report_text(), parse_mode="Markdown", reply_markup=generate_markup(cid, uid))
         return
 
     try:
-        bot.edit_message_text(build_report_text(), cid, call.message.message_id, reply_markup=generate_markup(cid, uid))
+        # استخدام Markdown لدعم الاقتباس والخط العريض
+        bot.edit_message_text(build_report_text(), cid, call.message.message_id, parse_mode="Markdown", reply_markup=generate_markup(cid, uid))
     except: pass
 
 if __name__ == "__main__":
