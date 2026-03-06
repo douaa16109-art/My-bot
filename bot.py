@@ -3,7 +3,7 @@ from telebot import types
 from flask import Flask
 from threading import Thread
 
-# --- إعداد السيرفر لضمان العمل المستمر ---
+# --- السيرفر لضمان العمل 24 ساعة ---
 app = Flask('')
 @app.route('/')
 def home(): return "Bot is running!"
@@ -16,11 +16,11 @@ def keep_alive():
 TOKEN = '8753124430:AAFrkVk2xu8FlIdZYhYKXziJxlHY_We3v7Q'
 bot = telebot.TeleBot(TOKEN)
 
-# ذاكرة البوت المبسطة
+# ذاكرة البوت
 data = {
     'readers': [], 
     'listeners': [], 
-    'header_text': "بِسْمِ اللَّهِ.. مَجْلِسُ التِّلَاوَةِ 🌿", # هذا النص الذي تعدله المشرفة يدوياً
+    'header_text': "❄ بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ ❄\n🌿 مَجْلِسُ تِلَاوَةِ القُرْآنِ الكَرِيمِ 🌿",
     'is_open': True
 }
 
@@ -33,7 +33,6 @@ def is_user_admin(chat_id, user_id):
 
 def generate_main_markup(chat_id, user_id):
     markup = types.InlineKeyboardMarkup(row_width=2)
-    # زر واحد لاختيار الحالة لتقليل الزحمة
     markup.add(types.InlineKeyboardButton("🔄 اختيار الحالة (قارئة/مستمعة)", callback_data="choose_status"))
     
     markup.add(
@@ -46,7 +45,6 @@ def generate_main_markup(chat_id, user_id):
             types.InlineKeyboardButton("📊 تقرير الختام", callback_data="admin_report"),
             types.InlineKeyboardButton("🔃 تحديث القائمة", callback_data="admin_refresh")
         )
-        # الزر السحري للمشرفة لتعديل نص الرسالة يدوياً
         markup.add(
             types.InlineKeyboardButton("✍️ تعديل نص المجلس", callback_data="admin_edit_header"),
             types.InlineKeyboardButton("🧨 تصفير القائمة", callback_data="admin_reset")
@@ -60,8 +58,7 @@ def generate_main_markup(chat_id, user_id):
 
 def build_report_text():
     status = "✅ مفتوحة" if data['is_open'] else "❌ مغلقة"
-    # البوت يعرض هنا ما كتبته المشرفة "حرفياً"
-    text = f"❄ {data['header_text']} ❄\n"
+    text = f"{data['header_text']}\n"
     text += f"━━━━━━━━━━━━━\n"
     text += f"حالة القائمة: {status}\n"
     text += f"━━━━━━━━━━━━━\n\n"
@@ -89,20 +86,19 @@ def start_bot(m):
 def handle_buttons(call):
     uid, uname, cid = call.from_user.id, call.from_user.first_name, call.message.chat.id
     
-    # اختيار الحالة (قارئة أو مستمعة)
-    if call.data == "choose_status":
+    if call.data == "admin_edit_header":
+        if is_user_admin(cid, uid):
+            # يرسل النص الحالي للمشرفة لتقوم بتعديله
+            msg = bot.send_message(cid, f"النص الحالي هو:\n\n`{data['header_text']}`\n\nانسخي النص أعلاه، عدليه، ثم أرسليه هنا كرسالة جديدة.", parse_mode="Markdown")
+            bot.register_next_step_handler(msg, update_header)
+        return
+
+    elif call.data == "choose_status":
         m = types.InlineKeyboardMarkup()
         m.add(types.InlineKeyboardButton("📖 تسجيل كقارئة", callback_data="reg_read"),
               types.InlineKeyboardButton("🎧 تسجيل كمستمعة", callback_data="reg_listen"))
-        m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_main"))
-        bot.edit_message_text("اختاري حالتكِ في المجلس:", cid, call.message.message_id, reply_markup=m)
-        return
-
-    # تعديل نص المجلس (للمشرفات)
-    elif call.data == "admin_edit_header":
-        if is_user_admin(cid, uid):
-            msg = bot.send_message(cid, "📝 أرسلي الآن النص الجديد (مثلاً: الورد من ص 5 إلى ص 15).\nسيمسح البوت النص القديم ويضع هذا مكانه.")
-            bot.register_next_step_handler(msg, update_header)
+        m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back"))
+        bot.edit_message_text("اختاري حالتكِ:", cid, call.message.message_id, reply_markup=m)
         return
 
     elif call.data == "reg_read":
@@ -132,31 +128,17 @@ def handle_buttons(call):
         data['readers'] = [p for p in data['readers'] if p['id'] != uid]
         data['listeners'] = [p for p in data['listeners'] if p['id'] != uid]
 
-    elif call.data == "admin_del_panel":
-        if is_user_admin(cid, uid):
-            del_m = types.InlineKeyboardMarkup()
-            for p in data['readers']:
-                del_m.add(types.InlineKeyboardButton(f"🗑️ {p['name']}", callback_data=f"del_{p['id']}"))
-            del_m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_main"))
-            bot.edit_message_text("لوحة الحذف للمشرفات:", cid, call.message.message_id, reply_markup=del_m)
-            return
-
-    elif call.data.startswith("del_"):
-        target_id = int(call.data.split("_")[1])
-        data['readers'] = [p for p in data['readers'] if p['id'] != target_id]
-
     elif call.data == "toggle_lock":
         if is_user_admin(cid, uid): data['is_open'] = not data['is_open']
 
-    # تحديث الرسالة الحالية
     try:
         bot.edit_message_text(build_report_text(), cid, call.message.message_id, reply_markup=generate_main_markup(cid, uid))
     except: pass
 
 def update_header(m):
-    # حفظ النص الجديد في الذاكرة
+    # اعتماد النص الجديد بالكامل من المشرفة
     data['header_text'] = m.text
-    bot.send_message(m.chat.id, "✅ تم تحديث نص المجلس بنجاح في أعلى القائمة.", reply_markup=generate_main_markup(m.chat.id, m.from_user.id))
+    bot.send_message(m.chat.id, "✅ تم تحديث واجهة المجلس بنجاح.", reply_markup=generate_main_markup(m.chat.id, m.from_user.id))
 
 if __name__ == "__main__":
     keep_alive()
