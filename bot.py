@@ -16,6 +16,7 @@ def keep_alive():
 TOKEN = '8753124430:AAFrkVk2xu8FlIdZYhYKXziJxlHY_We3v7Q'
 bot = telebot.TeleBot(TOKEN)
 
+# ذاكرة البوت
 data = {
     'readers': [], 
     'listeners': [], 
@@ -31,44 +32,59 @@ def is_user_admin(chat_id, user_id):
 
 def generate_markup(chat_id, user_id):
     markup = types.InlineKeyboardMarkup(row_width=2)
-    # أزرار العضوات
+    
+    # أزرار العضوات (تظهر للجميع)
     markup.add(types.InlineKeyboardButton("🔄 اختيار الحالة", callback_data="choose_status"))
     markup.add(
         types.InlineKeyboardButton("✅ أتممت القراءة", callback_data="set_done"),
         types.InlineKeyboardButton("🗑️ حذف اسمي فقط", callback_data="user_del_self")
     )
-    # أزرار المشرفات
+    
+    # أزرار المشرفات (مخفية تماماً عن العضوات)
     if is_user_admin(chat_id, user_id):
+        # الصف الأول للمشرفة
         markup.add(types.InlineKeyboardButton("🔃 تحديث القائمة", callback_data="admin_refresh"),
                    types.InlineKeyboardButton("📖 تغيير السورة", callback_data="admin_set_surah"))
+        
+        # الصف الثاني للمشرفة
         lock_text = "🔓 فتح التسجيل" if not data['is_open'] else "🔒 إغلاق التسجيل"
         markup.add(types.InlineKeyboardButton(lock_text, callback_data="toggle_lock"),
                    types.InlineKeyboardButton("🧨 تصفير القائمة", callback_data="admin_reset"))
-        markup.add(types.InlineKeyboardButton("⚙️ لوحة الحذف الإدارية", callback_data="admin_del_panel"))
+        
+        # الصف الثالث (الزر الذي كان مفقوداً)
+        markup.add(types.InlineKeyboardButton("⚙️ إدارة الأدوار والأسماء", callback_data="admin_del_panel"))
+        
     return markup
 
 def build_report_text():
     status = "✅ مفتوحة" if data['is_open'] else "❌ مغلقة"
     text = "❄️ *بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ* ❄️\n"
     text += "🌿 *مَجْلِسُ تِلَاوَةِ القُرْآنِ الكَرِيمِ* 🌿\n\n"
+    
+    # ميزة الاقتباس بـ MarkdownV2
     text += "> 📖 **اعْلَمِي رَعَاكِ اللهُ؛ أنَّ حُضوركِ لهذا المجلسِ محضُ توفيقٍ واصطفاءٍ من ربّكِ\\.\\. فكم من محرومٍ والقرآنُ بين يديه، وكم من مُوفّقٍ يُساقُ الخيرُ إليه\\!**\n\n"
+    
     text += "━━━━━━━━━━━━━\n"
     text += f"حالة القائمة الآن: {status}\n"
     text += "━━━━━━━━━━━━━\n\n"
+    
     text += f"📍 *السُّورَةُ الحَالِيَّةُ: {data['current_surah']}*\n"
     text += "━━━━━━━━━━━━━\n\n"
+    
     text += "🌷 *قَائِمَةُ القَارِئَاتِ* 🌷\n"
     if not data['readers']: text += "لا يوجد مسجلات بعد\\.\\.\n"
     else:
         for i, p in enumerate(data['readers'], 1):
             icon = "✅" if p['done'] else "⏳"
             text += f"{i}\\- {p['name']} {icon}\n"
+            
     text += "\n━━━━━━━━━━━━━\n"
     text += "🌷 *المُسْتَمِعَاتُ* 🌷\n"
     if not data['listeners']: text += "لا يوجد\\.\\.\n"
     else:
         for i, p in enumerate(data['listeners'], 1):
             text += f"{i}\\- {p['name']} 🌿\n"
+            
     return text
 
 @bot.message_handler(commands=['start'])
@@ -79,7 +95,7 @@ def start_bot(m):
 
 def save_surah_and_send_list(m):
     data['current_surah'] = m.text
-    bot.send_message(m.chat.id, "✅ تم تحديث السورة بنجاح.. إليكِ القائمة:")
+    bot.send_message(m.chat.id, "✅ تم تحديث السورة بنجاح..")
     bot.send_message(m.chat.id, build_report_text(), parse_mode="MarkdownV2", reply_markup=generate_markup(m.chat.id, m.from_user.id))
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -98,7 +114,7 @@ def handle_buttons(call):
         bot.edit_message_text(build_report_text(), cid, call.message.message_id, parse_mode="MarkdownV2", reply_markup=generate_markup(cid, uid))
         return
 
-    # تنفيذ أوامر التسجيل
+    # عمليات التسجيل
     if call.data == "reg_read":
         data['listeners'] = [p for p in data['listeners'] if p['id'] != uid]
         if not any(p['id'] == uid for p in data['readers']):
@@ -116,7 +132,7 @@ def handle_buttons(call):
         data['listeners'] = [p for p in data['listeners'] if p['id'] != uid]
         bot.answer_callback_query(call.id, "تم حذف اسمكِ بنجاح.")
 
-    # أوامر المشرفات الإضافية
+    # أوامر المشرفات
     if is_user_admin(cid, uid):
         if call.data == "admin_set_surah":
             msg = bot.send_message(cid, "📝 أرسلي اسم السورة الجديدة:")
@@ -136,13 +152,13 @@ def handle_buttons(call):
             for p in data['readers'] + data['listeners']:
                 del_m.add(types.InlineKeyboardButton(f"🗑️ حذف {p['name']}", callback_data=f"force_del_{p['id']}"))
             del_m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_main"))
-            bot.edit_message_text("لوحة التحكم الإدارية بالحذف:", cid, call.message.message_id, reply_markup=del_m)
+            bot.edit_message_text("⚙️ لوحة حذف الأسماء (للمشرفات):", cid, call.message.message_id, reply_markup=del_m)
             return
         elif call.data.startswith("force_del_"):
-            target_id = int(call.data.split("_")[2])
-            data['readers'] = [p for p in data['readers'] if p['id'] != target_id]
-            data['listeners'] = [p for p in data['listeners'] if p['id'] != target_id]
-            bot.answer_callback_query(call.id, "تم حذف الاسم بواسطة المشرفة.")
+            tid = int(call.data.split("_")[2])
+            data['readers'] = [p for p in data['readers'] if p['id'] != tid]
+            data['listeners'] = [p for p in data['listeners'] if p['id'] != tid]
+            bot.answer_callback_query(call.id, "تم الحذف الإداري.")
 
     try:
         bot.edit_message_text(build_report_text(), cid, call.message.message_id, parse_mode="MarkdownV2", reply_markup=generate_markup(cid, uid))
