@@ -33,11 +33,13 @@ def is_user_admin(chat_id, user_id):
 
 def generate_markup(chat_id, user_id):
     markup = types.InlineKeyboardMarkup(row_width=2)
+    # أزرار العضوات (تظهر للجميع)
     markup.add(types.InlineKeyboardButton("🔄 اختيار الحالة", callback_data="choose_status"))
     markup.add(
         types.InlineKeyboardButton("✅ أتممت القراءة", callback_data="set_done"),
         types.InlineKeyboardButton("🗑️ حذف اسمي فقط", callback_data="user_del_self")
     )
+    # أزرار المشرفات (مخفية تماماً عن العضوات)
     if is_user_admin(chat_id, user_id):
         markup.add(types.InlineKeyboardButton("🔃 تحديث القائمة", callback_data="admin_refresh"),
                    types.InlineKeyboardButton("📖 تغيير السورة", callback_data="admin_set_surah"))
@@ -48,68 +50,56 @@ def generate_markup(chat_id, user_id):
 
 def build_report_text():
     status = "✅ مفتوحة" if data['is_open'] else "❌ مغلقة"
-    
     text = "❄ **بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ** ❄\n"
     text += "🌿 **مَجْلِسُ تِلَاوَةِ القُرْآنِ الكَرِيمِ** 🌿\n\n"
-    
-    # ميزة الاقتباس للعبارة العلوية
     text += "> 📖 **اعْلَمِي رَعَاكِ اللهُ؛** أنَّ حُضوركِ لهذا المجلسِ محضُ توفيقٍ واصطفاءٍ من ربّكِ.. فكم من محرومٍ والقرآنُ بين يديه، وكم من مُوفّقٍ يُساقُ الخيرُ إليه!\n\n"
-    
     text += "━━━━━━━━━━━━━\n"
     text += f"حالة القائمة الآن: {status}\n"
     text += "━━━━━━━━━━━━━\n\n"
-    
-    # السورة الحالية بخط عريض
     text += f"📍 **السُّورَةُ الحَالِيَّةُ: {data['current_surah']}**\n"
     text += "━━━━━━━━━━━━━\n\n"
-    
-    # قائمة القارئات بورد التوليب وخط عريض
     text += "🌷 **قَائِمَةُ القَارِئَاتِ** 🌷\n"
-    if not data['readers']: 
-        text += "لا يوجد مسجلات بعد..\n"
+    if not data['readers']: text += "لا يوجد مسجلات بعد..\n"
     else:
         for i, p in enumerate(data['readers'], 1):
             icon = "✅" if p['done'] else "⏳"
             text += f"{i}- {p['name']} {icon}\n"
-            
     text += "\n━━━━━━━━━━━━━\n"
-    
-    # قائمة المستمعات
     text += "🌷 **المُسْتَمِعَاتُ** 🌷\n"
-    if not data['listeners']: 
-        text += "لا يوجد..\n"
+    if not data['listeners']: text += "لا يوجد..\n"
     else:
         for i, p in enumerate(data['listeners'], 1):
             text += f"{i}- {p['name']} 🌿\n"
-            
     return text
 
 @bot.message_handler(commands=['start'])
 def start_bot(m):
-    if not is_user_admin(m.chat.id, m.from_user.id): 
-        return 
+    if not is_user_admin(m.chat.id, m.from_user.id): return 
     msg = bot.send_message(m.chat.id, "📝 أهلاً بكِ أيتها المشرفة.. ما هي السورة الحالية؟")
     bot.register_next_step_handler(msg, save_surah_and_send_list)
 
 def save_surah_and_send_list(m):
     data['current_surah'] = m.text
-    bot.send_message(m.chat.id, build_report_text(), parse_mode="MarkdownV2", reply_markup=generate_markup(m.chat.id, m.from_user.id))
+    bot.send_message(m.chat.id, build_report_text(), parse_mode="Markdown", reply_markup=generate_markup(m.chat.id, m.from_user.id))
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_buttons(call):
     uid, uname, cid = call.from_user.id, call.from_user.first_name, call.message.chat.id
     
-    if call.data == "admin_set_surah" and is_user_admin(cid, uid):
-        msg = bot.send_message(cid, "📝 أرسلي اسم السورة الجديدة:")
-        bot.register_next_step_handler(msg, save_surah_and_send_list)
-
-    elif call.data == "choose_status":
+    if call.data == "choose_status":
         m = types.InlineKeyboardMarkup()
         m.add(types.InlineKeyboardButton("📖 تسجيل كقارئة", callback_data="reg_read"),
               types.InlineKeyboardButton("🎧 تسجيل كمستمعة", callback_data="reg_listen"))
+        m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_main"))
         bot.edit_message_text("اختاري حالتكِ في المجلس:", cid, call.message.message_id, reply_markup=m)
+        return # التوقف هنا لمنع التحديث التلقائي الذي يمسح الأزرار
 
-    elif call.data == "reg_read":
+    elif call.data == "back_to_main":
+        bot.edit_message_text(build_report_text(), cid, call.message.message_id, parse_mode="Markdown", reply_markup=generate_markup(cid, uid))
+        return
+
+    # تنفيذ المهام وتحديث القائمة فوراً
+    if call.data == "reg_read":
         data['listeners'] = [p for p in data['listeners'] if p['id'] != uid]
         if not any(p['id'] == uid for p in data['readers']):
             data['readers'].append({'id': uid, 'name': uname, 'done': False})
@@ -129,20 +119,24 @@ def handle_buttons(call):
         data['listeners'] = [p for p in data['listeners'] if p['id'] != uid]
         bot.answer_callback_query(call.id, "تم حذف اسمكِ بنجاح.")
 
-    elif call.data == "admin_reset" and is_user_admin(cid, uid):
-        data['readers'], data['listeners'] = [], []
-        bot.answer_callback_query(call.id, "تم تصفير القائمة.")
+    # أوامر المشرفات مع التحقق
+    if is_user_admin(cid, uid):
+        if call.data == "admin_set_surah":
+            msg = bot.send_message(cid, "📝 أرسلي اسم السورة الجديدة:")
+            bot.register_next_step_handler(msg, save_surah_and_send_list)
+            return
+        elif call.data == "admin_reset":
+            data['readers'], data['listeners'] = [], []
+            bot.answer_callback_query(call.id, "تم تصفير القائمة.")
+        elif call.data == "toggle_lock":
+            data['is_open'] = not data['is_open']
+        elif call.data == "admin_refresh":
+            bot.delete_message(cid, call.message.message_id)
+            bot.send_message(cid, build_report_text(), parse_mode="Markdown", reply_markup=generate_markup(cid, uid))
+            return
 
-    elif call.data == "toggle_lock" and is_user_admin(cid, uid):
-        data['is_open'] = not data['is_open']
-
-    elif call.data == "admin_refresh" and is_user_admin(cid, uid):
-        bot.delete_message(cid, call.message.message_id)
-        bot.send_message(cid, build_report_text(), parse_mode="Markdown", reply_markup=generate_markup(cid, uid))
-        return
-
+    # تحديث النص والأزرار بناءً على رتبة المستخدم الحالية
     try:
-        # استخدام Markdown لدعم الاقتباس والخط العريض
         bot.edit_message_text(build_report_text(), cid, call.message.message_id, parse_mode="Markdown", reply_markup=generate_markup(cid, uid))
     except: pass
 
