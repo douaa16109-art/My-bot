@@ -16,7 +16,6 @@ def keep_alive():
 TOKEN = '8753124430:AAFrkVk2xu8FlIdZYhYKXziJxlHY_We3v7Q'
 bot = telebot.TeleBot(TOKEN)
 
-# ذاكرة البوت
 data = {
     'readers': [], 
     'listeners': [], 
@@ -24,35 +23,30 @@ data = {
     'current_surah': "لم تحدد بعد"
 }
 
-def is_user_admin(chat_id, user_id):
+def get_user_rank(chat_id, user_id):
     try:
+        if chat_id > 0: return True
         member = bot.get_chat_member(chat_id, user_id)
         return member.status in ['administrator', 'creator']
     except: return False
 
 def generate_markup(chat_id, user_id):
     markup = types.InlineKeyboardMarkup(row_width=2)
+    is_admin = get_user_rank(chat_id, user_id)
     
-    # أزرار العضوات (تظهر للجميع)
     markup.add(types.InlineKeyboardButton("🔄 اختيار الحالة", callback_data="choose_status"))
     markup.add(
         types.InlineKeyboardButton("✅ أتممت القراءة", callback_data="set_done"),
         types.InlineKeyboardButton("🗑️ حذف اسمي فقط", callback_data="user_del_self")
     )
     
-    # أزرار المشرفات (مخفية تماماً عن العضوات)
-    if is_user_admin(chat_id, user_id):
-        # الصف الأول للمشرفة
+    if is_admin:
         markup.add(types.InlineKeyboardButton("🔃 تحديث القائمة", callback_data="admin_refresh"),
                    types.InlineKeyboardButton("📖 تغيير السورة", callback_data="admin_set_surah"))
-        
-        # الصف الثاني للمشرفة
         lock_text = "🔓 فتح التسجيل" if not data['is_open'] else "🔒 إغلاق التسجيل"
         markup.add(types.InlineKeyboardButton(lock_text, callback_data="toggle_lock"),
                    types.InlineKeyboardButton("🧨 تصفير القائمة", callback_data="admin_reset"))
-        
-        # الصف الثالث (الزر الذي كان مفقوداً)
-        markup.add(types.InlineKeyboardButton("⚙️ إدارة الأدوار والأسماء", callback_data="admin_del_panel"))
+        markup.add(types.InlineKeyboardButton("⚙️ إدارة الأسماء والترتيب", callback_data="admin_manage_panel"))
         
     return markup
 
@@ -60,49 +54,47 @@ def build_report_text():
     status = "✅ مفتوحة" if data['is_open'] else "❌ مغلقة"
     text = "❄️ *بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ* ❄️\n"
     text += "🌿 *مَجْلِسُ تِلَاوَةِ القُرْآنِ الكَرِيمِ* 🌿\n\n"
-    
-    # ميزة الاقتباس بـ MarkdownV2
-    text += "> 📖 **اعْلَمِي رَعَاكِ اللهُ؛ أنَّ حُضوركِ لهذا المجلسِ محضُ توفيقٍ واصطفاءٍ من ربّكِ\\.\\. فكم من محرومٍ والقرآنُ بين يديه، وكم من مُوفّقٍ يُساقُ الخيرُ إليه\\!**\n\n"
-    
+    text += ">📖 **اعْلَمِي رَعَاكِ اللهُ؛ أنَّ حُضوركِ لهذا المجلسِ محضُ توفيقٍ واصطفاءٍ من ربّكِ\\.\\. فكم من محرومٍ والقرآنُ بين يديه، وكم من مُوفّقٍ يُساقُ الخيرُ إليه\\!**\n\n"
     text += "━━━━━━━━━━━━━\n"
     text += f"حالة القائمة الآن: {status}\n"
     text += "━━━━━━━━━━━━━\n\n"
-    
     text += f"📍 *السُّورَةُ الحَالِيَّةُ: {data['current_surah']}*\n"
     text += "━━━━━━━━━━━━━\n\n"
-    
     text += "🌷 *قَائِمَةُ القَارِئَاتِ* 🌷\n"
     if not data['readers']: text += "لا يوجد مسجلات بعد\\.\\.\n"
     else:
         for i, p in enumerate(data['readers'], 1):
             icon = "✅" if p['done'] else "⏳"
             text += f"{i}\\- {p['name']} {icon}\n"
-            
     text += "\n━━━━━━━━━━━━━\n"
     text += "🌷 *المُسْتَمِعَاتُ* 🌷\n"
     if not data['listeners']: text += "لا يوجد\\.\\.\n"
     else:
         for i, p in enumerate(data['listeners'], 1):
             text += f"{i}\\- {p['name']} 🌿\n"
-            
     return text
 
 @bot.message_handler(commands=['start'])
 def start_bot(m):
-    if not is_user_admin(m.chat.id, m.from_user.id): return 
+    if not get_user_rank(m.chat.id, m.from_user.id): return 
     msg = bot.send_message(m.chat.id, "📝 أهلاً بكِ أيتها المشرفة.. ما هي السورة الحالية؟")
     bot.register_next_step_handler(msg, save_surah_and_send_list)
 
 def save_surah_and_send_list(m):
     data['current_surah'] = m.text
-    bot.send_message(m.chat.id, "✅ تم تحديث السورة بنجاح..")
+    bot.send_message(m.chat.id, "✅ تم تحديث السورة..")
     bot.send_message(m.chat.id, build_report_text(), parse_mode="MarkdownV2", reply_markup=generate_markup(m.chat.id, m.from_user.id))
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_buttons(call):
     uid, uname, cid = call.from_user.id, call.from_user.first_name, call.message.chat.id
-    
+    is_admin = get_user_rank(cid, uid)
+
     if call.data == "choose_status":
+        # منع الدخول لاختيار الحالة إذا كان المجلس مغلقاً
+        if not data['is_open']:
+            bot.answer_callback_query(call.id, "⚠️ عذراً، باب التسجيل في المجلس مغلق حالياً.", show_alert=True)
+            return
         m = types.InlineKeyboardMarkup()
         m.add(types.InlineKeyboardButton("📖 تسجيل كقارئة", callback_data="reg_read"),
               types.InlineKeyboardButton("🎧 تسجيل كمستمعة", callback_data="reg_listen"))
@@ -114,51 +106,105 @@ def handle_buttons(call):
         bot.edit_message_text(build_report_text(), cid, call.message.message_id, parse_mode="MarkdownV2", reply_markup=generate_markup(cid, uid))
         return
 
-    # عمليات التسجيل
+    # منطق التسجيل (تمت إضافة فحص القفل هنا أيضاً للأمان)
     if call.data == "reg_read":
+        if not data['is_open']:
+            bot.answer_callback_query(call.id, "❌ التسجيل مغلق!", show_alert=True)
+            return
         data['listeners'] = [p for p in data['listeners'] if p['id'] != uid]
         if not any(p['id'] == uid for p in data['readers']):
             data['readers'].append({'id': uid, 'name': uname, 'done': False})
+            
     elif call.data == "reg_listen":
+        if not data['is_open']:
+            bot.answer_callback_query(call.id, "❌ التسجيل مغلق!", show_alert=True)
+            return
         data['readers'] = [p for p in data['readers'] if p['id'] != uid]
         if not any(p['id'] == uid for p in data['listeners']):
             data['listeners'].append({'id': uid, 'name': uname})
+
     elif call.data == "set_done":
         for p in data['readers']:
             if p['id'] == uid: p['done'] = True
         bot.answer_callback_query(call.id, "تَقَبَّلَ اللَّهُ طَاعَتَكِ ✅", show_alert=True)
+        
     elif call.data == "user_del_self":
         data['readers'] = [p for p in data['readers'] if p['id'] != uid]
         data['listeners'] = [p for p in data['listeners'] if p['id'] != uid]
-        bot.answer_callback_query(call.id, "تم حذف اسمكِ بنجاح.")
+        bot.answer_callback_query(call.id, "تم حذف اسمكِ.")
 
-    # أوامر المشرفات
-    if is_user_admin(cid, uid):
-        if call.data == "admin_set_surah":
-            msg = bot.send_message(cid, "📝 أرسلي اسم السورة الجديدة:")
-            bot.register_next_step_handler(msg, save_surah_and_send_list)
-            return
-        elif call.data == "admin_reset":
-            data['readers'], data['listeners'] = [], []
-            bot.answer_callback_query(call.id, "تم تصفير القائمة.")
-        elif call.data == "toggle_lock":
+    # لوحة الإدارة
+    if is_admin:
+        if call.data == "toggle_lock":
             data['is_open'] = not data['is_open']
+            bot.answer_callback_query(call.id, "تم تغيير حالة القائمة.")
+            # تحديث الرسالة فوراً لتعكس القفل
+            bot.edit_message_text(build_report_text(), cid, call.message.message_id, parse_mode="MarkdownV2", reply_markup=generate_markup(cid, uid))
+            return
+            
+        elif call.data == "admin_manage_panel":
+            m = types.InlineKeyboardMarkup()
+            for p in data['readers'] + data['listeners']:
+                role = "📖" if any(r['id'] == p['id'] for r in data['readers']) else "🎧"
+                m.add(types.InlineKeyboardButton(f"{role} {p['name']}", callback_data=f"opts_{p['id']}"))
+            m.add(types.InlineKeyboardButton("⬅️ رجوع للقائمة الرئيسية", callback_data="back_to_main"))
+            bot.edit_message_text("⚙️ تحكمي في ترتيب ومكان الأسماء:", cid, call.message.message_id, reply_markup=m)
+            return
+
+        elif call.data.startswith("opts_"):
+            tid = int(call.data.split("_")[1])
+            m = types.InlineKeyboardMarkup()
+            m.add(types.InlineKeyboardButton("🔼 رفع للأعلى", callback_data=f"up_{tid}"),
+                  types.InlineKeyboardButton("🔽 خفض للأسفل", callback_data=f"down_{tid}"))
+            m.add(types.InlineKeyboardButton("🔄 تبديل (قارئة ↔️ مستمعة)", callback_data=f"swap_{tid}"))
+            m.add(types.InlineKeyboardButton("🗑️ حذف نهائي", callback_data=f"fdel_{tid}"))
+            m.add(types.InlineKeyboardButton("🔙 عودة للأسماء", callback_data="admin_manage_panel"))
+            bot.edit_message_text("تعديل مكان/حالة الاسم المختارة:", cid, call.message.message_id, reply_markup=m)
+            return
+
+        elif call.data.startswith("up_") or call.data.startswith("down_"):
+            action, tid = call.data.split("_")
+            tid = int(tid)
+            target_list = data['readers'] if any(p['id'] == tid for p in data['readers']) else data['listeners']
+            idx = next(i for i, p in enumerate(target_list) if p['id'] == tid)
+            if action == "up" and idx > 0:
+                target_list[idx], target_list[idx-1] = target_list[idx-1], target_list[idx]
+            elif action == "down" and idx < len(target_list) - 1:
+                target_list[idx], target_list[idx+1] = target_list[idx+1], target_list[idx]
+            bot.answer_callback_query(call.id, "تم تغيير الترتيب.")
+
+        elif call.data.startswith("swap_"):
+            tid = int(call.data.split("_")[1])
+            reader = next((p for p in data['readers'] if p['id'] == tid), None)
+            if reader:
+                data['readers'].remove(reader)
+                data['listeners'].append({'id': reader['id'], 'name': reader['name']})
+            else:
+                listener = next((p for p in data['listeners'] if p['id'] == tid), None)
+                if listener:
+                    data['listeners'].remove(listener)
+                    data['readers'].append({'id': listener['id'], 'name': listener['name'], 'done': False})
+            bot.answer_callback_query(call.id, "تم تبديل الحالة.")
+
+        elif call.data.startswith("fdel_"):
+            tid = int(call.data.split("_")[1])
+            data['readers'] = [p for p in data['readers'] if p['id'] != tid]
+            data['listeners'] = [p for p in data['listeners'] if p['id'] != tid]
+            bot.answer_callback_query(call.id, "تم الحذف.")
+
         elif call.data == "admin_refresh":
             bot.delete_message(cid, call.message.message_id)
             bot.send_message(cid, build_report_text(), parse_mode="MarkdownV2", reply_markup=generate_markup(cid, uid))
             return
-        elif call.data == "admin_del_panel":
-            del_m = types.InlineKeyboardMarkup()
-            for p in data['readers'] + data['listeners']:
-                del_m.add(types.InlineKeyboardButton(f"🗑️ حذف {p['name']}", callback_data=f"force_del_{p['id']}"))
-            del_m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_main"))
-            bot.edit_message_text("⚙️ لوحة حذف الأسماء (للمشرفات):", cid, call.message.message_id, reply_markup=del_m)
+            
+        elif call.data == "admin_set_surah":
+            msg = bot.send_message(cid, "📝 أرسلي اسم السورة الجديدة:")
+            bot.register_next_step_handler(msg, save_surah_and_send_list)
             return
-        elif call.data.startswith("force_del_"):
-            tid = int(call.data.split("_")[2])
-            data['readers'] = [p for p in data['readers'] if p['id'] != tid]
-            data['listeners'] = [p for p in data['listeners'] if p['id'] != tid]
-            bot.answer_callback_query(call.id, "تم الحذف الإداري.")
+            
+        elif call.data == "admin_reset":
+            data['readers'], data['listeners'] = [], []
+            bot.answer_callback_query(call.id, "تم تصفير القائمة.")
 
     try:
         bot.edit_message_text(build_report_text(), cid, call.message.message_id, parse_mode="MarkdownV2", reply_markup=generate_markup(cid, uid))
