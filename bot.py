@@ -14,11 +14,11 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# توكن البوت الخاص بكِ
-TOKEN = '8753124430:AAFrkVk2xu8FlIdZYhYKXziJxlHY_We3v7Q'
+# التوكن الجديد الذي أرسلتِه
+TOKEN = '8753124430:AAHjTw4-KRaNUSE5OznIwMjzFaXN6ll2FIM'
 bot = telebot.TeleBot(TOKEN)
 
-# ذاكرة البوت (تصفر عند إعادة التشغيل في ريندر)
+# ذاكرة البوت
 data = {
     'readers': [], 
     'listeners': [], 
@@ -26,7 +26,7 @@ data = {
     'current_surah': "لم تحدد بعد"
 }
 
-# دالة التحقق من الرتبة (مشرفة أو مالكة)
+# دالة التحقق من المشرفين
 def get_user_rank(chat_id, user_id):
     try:
         if chat_id > 0: return True 
@@ -111,7 +111,6 @@ def handle_buttons(call):
         bot.edit_message_text(build_report_text(), cid, call.message.message_id, parse_mode="MarkdownV2", reply_markup=generate_markup(cid, uid))
         return
 
-    # منطق التسجيل
     if call.data == "reg_read" and data['is_open']:
         data['listeners'] = [p for p in data['listeners'] if p['id'] != uid]
         if not any(p['id'] == uid for p in data['readers']):
@@ -128,7 +127,6 @@ def handle_buttons(call):
         data['readers'] = [p for p in data['readers'] if p['id'] != uid]
         data['listeners'] = [p for p in data['listeners'] if p['id'] != uid]
 
-    # لوحة الإدارة (للمشرفات)
     if is_admin:
         if call.data == "admin_manage_panel":
             m = types.InlineKeyboardMarkup()
@@ -189,7 +187,7 @@ def handle_buttons(call):
 
 if __name__ == "__main__":
     keep_alive()
-    # السطر السحري لحل مشكلة Conflict 409
+    # تنظيف الاتصال القديم
     bot.remove_webhook()
     time.sleep(1)
     bot.infinity_polling(timeout=10, long_polling_timeout=5)
