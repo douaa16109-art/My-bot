@@ -109,4 +109,4 @@ if __name__ == "__main__":
     keep_alive()
     bot.remove_webhook() # أهم سطر لحل مشكلة Conflict 409
     time.sleep(2)
-    bot.infinity_polling(skip_pending=True) # يتجاهل الطلبات القديمة المعلقة
+    bot.infinity_polling(skip_pending=True) # يتجاهل الطلبات القديمة المعلقةbot.polling(none_stop=True, interval=3, timeout=30)
