@@ -4,7 +4,7 @@ from flask import Flask
 from threading import Thread
 import time
 
-# --- السيرفر لضمان العمل 24 ساعة ---
+# --- السيرفر لضمان العمل 24 ساعة على Render ---
 app = Flask('')
 @app.route('/')
 def home(): return "Bot is running!"
@@ -14,11 +14,11 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# التوكن الجديد الذي أرسلتِه
+# التوكن الجديد الصحيح (تم تحديثه بناءً على طلبك)
 TOKEN = '8753124430:AAHjTw4-KRaNUSE5OznIwMjzFaXN6ll2FIM'
 bot = telebot.TeleBot(TOKEN)
 
-# ذاكرة البوت
+# ذاكرة البوت (البيانات المؤقتة)
 data = {
     'readers': [], 
     'listeners': [], 
@@ -26,7 +26,7 @@ data = {
     'current_surah': "لم تحدد بعد"
 }
 
-# دالة التحقق من المشرفين
+# دالة التحقق من رتبة المشرفين
 def get_user_rank(chat_id, user_id):
     try:
         if chat_id > 0: return True 
@@ -187,7 +187,7 @@ def handle_buttons(call):
 
 if __name__ == "__main__":
     keep_alive()
-    # تنظيف الاتصال القديم
+    # سطر تنظيف الاتصال لضمان العمل الفوري
     bot.remove_webhook()
     time.sleep(1)
     bot.infinity_polling(timeout=10, long_polling_timeout=5)
