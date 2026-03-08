@@ -4,7 +4,7 @@ from flask import Flask
 from threading import Thread
 import time
 
-# --- السيرفر لضمان العمل 24 ساعة على Render ---
+# --- السيرفر لضمان العمل 24 ساعة ---
 app = Flask('')
 @app.route('/')
 def home(): return "Bot is running!"
@@ -14,11 +14,10 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# التوكن الجديد الصحيح (تم تحديثه بناءً على طلبك)
+# التوكن الجديد الخاص بكِ
 TOKEN = '8753124430:AAHjTw4-KRaNUSE5OznIwMjzFaXN6ll2FIM'
 bot = telebot.TeleBot(TOKEN)
 
-# ذاكرة البوت (البيانات المؤقتة)
 data = {
     'readers': [], 
     'listeners': [], 
@@ -26,7 +25,7 @@ data = {
     'current_surah': "لم تحدد بعد"
 }
 
-# دالة التحقق من رتبة المشرفين
+# دالة ذكية للتحقق من الرتبة
 def get_user_rank(chat_id, user_id):
     try:
         if chat_id > 0: return True 
@@ -38,12 +37,14 @@ def generate_markup(chat_id, user_id):
     markup = types.InlineKeyboardMarkup(row_width=2)
     is_admin = get_user_rank(chat_id, user_id)
     
+    # أزرار تظهر للجميع (أعضاء ومشرفات)
     markup.add(types.InlineKeyboardButton("🔄 اختيار الحالة", callback_data="choose_status"))
     markup.add(
         types.InlineKeyboardButton("✅ أتممت القراءة", callback_data="set_done"),
         types.InlineKeyboardButton("🗑️ حذف اسمي فقط", callback_data="user_del_self")
     )
     
+    # أزرار تظهر للمشرفات فقط
     if is_admin:
         markup.add(types.InlineKeyboardButton("🔃 تحديث القائمة", callback_data="admin_refresh"),
                    types.InlineKeyboardButton("📖 تغيير السورة", callback_data="admin_set_surah"))
@@ -52,7 +53,7 @@ def generate_markup(chat_id, user_id):
         markup.add(types.InlineKeyboardButton(lock_text, callback_data="toggle_lock"),
                    types.InlineKeyboardButton("🧨 تصفير القائمة", callback_data="admin_reset"))
         
-        # الزر المطلوب لإدارة الأسماء والترتيب
+        # الزر المطلوب لإدارة الأسماء والترتيب (للمشرفات فقط)
         markup.add(types.InlineKeyboardButton("⚙️ إدارة الأسماء والترتيب", callback_data="admin_manage_panel"))
         
     return markup
@@ -83,7 +84,10 @@ def build_report_text():
 
 @bot.message_handler(commands=['start'])
 def start_bot(m):
-    if not get_user_rank(m.chat.id, m.from_user.id): return 
+    # أمر ستارت مخصص للمشرفات لتهيئة القائمة
+    if not get_user_rank(m.chat.id, m.from_user.id):
+        bot.reply_to(m, "⚠️ عذراً، هذا الأمر مخصص لمشرفات المجلس فقط.")
+        return 
     msg = bot.send_message(m.chat.id, "📝 أهلاً بكِ أيتها المشرفة.. ما هي السورة الحالية؟")
     bot.register_next_step_handler(msg, save_surah_and_send_list)
 
@@ -95,6 +99,12 @@ def save_surah_and_send_list(m):
 def handle_buttons(call):
     uid, uname, cid = call.from_user.id, call.from_user.first_name, call.message.chat.id
     is_admin = get_user_rank(cid, uid)
+
+    # فحص صلاحية الضغط على أزرار الإدارة
+    if "admin_" in call.data or call.data in ["toggle_lock", "admin_manage_panel"]:
+        if not is_admin:
+            bot.answer_callback_query(call.id, "⚠️ هذا الزر للمشرفات فقط!", show_alert=True)
+            return
 
     if call.data == "choose_status":
         if not data['is_open']:
@@ -111,6 +121,7 @@ def handle_buttons(call):
         bot.edit_message_text(build_report_text(), cid, call.message.message_id, parse_mode="MarkdownV2", reply_markup=generate_markup(cid, uid))
         return
 
+    # منطق التسجيل (للجميع)
     if call.data == "reg_read" and data['is_open']:
         data['listeners'] = [p for p in data['listeners'] if p['id'] != uid]
         if not any(p['id'] == uid for p in data['readers']):
@@ -120,13 +131,18 @@ def handle_buttons(call):
         if not any(p['id'] == uid for p in data['listeners']):
             data['listeners'].append({'id': uid, 'name': uname})
     elif call.data == "set_done":
+        found = False
         for p in data['readers']:
-            if p['id'] == uid: p['done'] = True
-        bot.answer_callback_query(call.id, "تَقَبَّلَ اللَّهُ طَاعَتَكِ ✅", show_alert=True)
+            if p['id'] == uid: 
+                p['done'] = True
+                found = True
+        if found: bot.answer_callback_query(call.id, "تَقَبَّلَ اللَّهُ طَاعَتَكِ ✅", show_alert=True)
+        else: bot.answer_callback_query(call.id, "يجب التسجيل كقارئة أولاً!", show_alert=True)
     elif call.data == "user_del_self":
         data['readers'] = [p for p in data['readers'] if p['id'] != uid]
         data['listeners'] = [p for p in data['listeners'] if p['id'] != uid]
 
+    # لوحة الإدارة الكاملة (للمشرفات)
     if is_admin:
         if call.data == "admin_manage_panel":
             m = types.InlineKeyboardMarkup()
@@ -144,7 +160,7 @@ def handle_buttons(call):
             m.add(types.InlineKeyboardButton("🔄 تبديل الحالة", callback_data=f"swap_{tid}"),
                   types.InlineKeyboardButton("🗑️ حذف نهائي", callback_data=f"fdel_{tid}"))
             m.add(types.InlineKeyboardButton("🔙 عودة", callback_data="admin_manage_panel"))
-            bot.edit_message_text("تعديل الاسم المختارة:", cid, call.message.message_id, reply_markup=m)
+            bot.edit_message_text("تعديل الاسم المختار:", cid, call.message.message_id, reply_markup=m)
             return
         elif call.data.startswith("up_") or call.data.startswith("down_"):
             act, tid = call.data.split("_")
@@ -187,7 +203,6 @@ def handle_buttons(call):
 
 if __name__ == "__main__":
     keep_alive()
-    # سطر تنظيف الاتصال لضمان العمل الفوري
     bot.remove_webhook()
     time.sleep(1)
     bot.infinity_polling(timeout=10, long_polling_timeout=5)
