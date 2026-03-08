@@ -154,4 +154,5 @@ if __name__ == "__main__":
     keep_alive()
     bot.remove_webhook()
     time.sleep(1)
-    bot.infinity_polling(timeout=20)
+    bot.polling(none_stop=True, interval=0, timeout=20)
+
