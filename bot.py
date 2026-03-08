@@ -15,7 +15,7 @@ def keep_alive():
     t.start()
 
 # التوكن الجديد الخاص بكِ
-TOKEN = '8753124430:AAHjTw4-KRaNUSE5OznIwMjzFaXN6ll2FIM'
+TOKEN = '8753124430:AAHjTw4-KRaNUSE5OznIwMjzFaXN6ll2F'
 bot = telebot.TeleBot(TOKEN)
 
 data = {
