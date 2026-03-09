@@ -16,14 +16,22 @@ def keep_alive():
 TOKEN = '8684986706:AAF6pkJQ8a4N3XeecnnJOXhsJpr8z7gv8bs'
 bot = telebot.TeleBot(TOKEN, threaded=True)
 
+# قاعدة البيانات المؤقتة
 data = {
     'readers': [], 
     'listeners': [], 
     'extra_roles': [], 
     'is_open': True, 
     'extra_locked': False, 
-    'current_surah': "لم تُحدد بعد"
+    'current_surah': "لم تحدد بعد"
 }
+
+# دالة لتنظيف النص من الحروف التي تسبب خطأ 400
+def clean_txt(text):
+    chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for char in chars:
+        text = text.replace(char, f"\\{char}")
+    return text
 
 def get_user_rank(chat_id, user_id):
     try:
@@ -47,20 +55,20 @@ def build_menu(chat_id, user_id):
 
 def get_text():
     t = "❄️ *بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ* ❄️\n🌿 *مَجْلِسُ تِلَاوَةِ القُرْآنِ الكَرِيمِ* 🌿\n\n"
-    t += f"📍 *السُّورَةُ: {data['current_surah']}*\n━━━━━━━━━━━━━\n\n"
+    t += f"📍 *السُّورَةُ: {clean_txt(data['current_surah'])}*\n━━━━━━━━━━━━━\n\n"
     t += "📖 *القارئات:*\n"
-    if not data['readers']: t += "⏳ في انتظار التسجيل..\n"
+    if not data['readers']: t += "⏳ في انتظار التسجيل\\.\\.\n"
     else:
         for i, p in enumerate(data['readers'], 1): 
-            t += f"{i}\\- {p['name']} {'✅' if p['done'] else '⏳'}\n"
+            t += f"{i}\\- {clean_txt(p['name'])} {'✅' if p['done'] else '⏳'}\n"
     t += "\n✨ *الأدوار الإضافية:*\n"
-    if not data['extra_roles']: t += "لا يوجد إضافي..\n"
+    if not data['extra_roles']: t += "لا يوجد إضافي\\.\n"
     else:
-        for i, p in enumerate(data['extra_roles'], 1): t += f"{i}\\- {p['name']} ⭐\n"
+        for i, p in enumerate(data['extra_roles'], 1): t += f"{i}\\- {clean_txt(p['name'])} ⭐\n"
     t += "\n🎧 *المستمعات:*\n"
-    if not data['listeners']: t += "لا يوجد..\n"
+    if not data['listeners']: t += "لا يوجد\\.\n"
     else:
-        for i, p in enumerate(data['listeners'], 1): t += f"{i}\\- {p['name']} 🌿\n"
+        for i, p in enumerate(data['listeners'], 1): t += f"{i}\\- {clean_txt(p['name'])} 🌿\n"
     return t
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -110,8 +118,7 @@ def handle_calls(call):
     elif call.data.startswith("list_to_order:") and is_admin:
         list_type = call.data.split(":")[1]
         m = types.InlineKeyboardMarkup()
-        target_list = data[list_type]
-        for i, p in enumerate(target_list):
+        for i, p in enumerate(data[list_type]):
             m.add(types.InlineKeyboardButton(f"{p['name']}", callback_data=f"pick_user:{list_type}:{i}"))
         m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="order_menu"))
         bot.edit_message_reply_markup(cid, call.message.message_id, reply_markup=m)
@@ -119,7 +126,6 @@ def handle_calls(call):
 
     elif call.data.startswith("pick_user:") and is_admin:
         _, list_type, index = call.data.split(":")
-        index = int(index)
         m = types.InlineKeyboardMarkup()
         m.add(types.InlineKeyboardButton("🔼 رفع", callback_data=f"move:{list_type}:{index}:up"),
               types.InlineKeyboardButton("🔽 خفض", callback_data=f"move:{list_type}:{index}:down"))
@@ -129,28 +135,39 @@ def handle_calls(call):
 
     elif call.data.startswith("move:") and is_admin:
         _, list_type, index, direction = call.data.split(":")
-        index = int(index)
+        idx = int(index)
         target_list = data[list_type]
-        if direction == "up" and index > 0:
-            target_list[index], target_list[index-1] = target_list[index-1], target_list[index]
-        elif direction == "down" and index < len(target_list) - 1:
-            target_list[index], target_list[index+1] = target_list[index+1], target_list[index]
-        bot.answer_callback_query(call.id, "تم تغيير الترتيب ✅")
-        # العودة لاختيار الاسم في نفس القائمة
+        if direction == "up" and idx > 0:
+            target_list[idx], target_list[idx-1] = target_list[idx-1], target_list[idx]
+        elif direction == "down" and idx < len(target_list) - 1:
+            target_list[idx], target_list[idx+1] = target_list[idx+1], target_list[idx]
+        bot.answer_callback_query(call.id, "تم التغيير ✅")
+        # العودة لقائمة الأسماء لإكمال الترتيب
         handle_calls(types.CallbackQuery(call.id, call.from_user, call.message, call.chat_instance, f"list_to_order:{list_type}"))
         return
 
+    elif call.data == "set_done":
+        for p in data['readers']:
+            if p['id'] == uid: p['done'] = True
+    elif call.data == "user_del":
+        for l in [data['readers'], data['listeners'], data['extra_roles']]:
+            l[:] = [p for p in l if p['id'] != uid]
     elif call.data == "reset_all" and is_admin:
         data['readers'], data['listeners'], data['extra_roles'] = [], [], []
+    elif call.data == "set_surah" and is_admin:
+        msg = bot.send_message(cid, "📝 أرسلي اسم السورة الجديدة:")
+        bot.register_next_step_handler(msg, update_surah)
+        return
 
     try:
         bot.edit_message_text(get_text(), cid, call.message.message_id, parse_mode="MarkdownV2", reply_markup=build_menu(cid, uid))
         bot.answer_callback_query(call.id, "تم ✅")
-    except: bot.answer_callback_query(call.id)
+    except Exception as e:
+        bot.answer_callback_query(call.id)
 
 def update_surah(m):
     data['current_surah'] = m.text
-    bot.send_message(m.chat.id, "✅ تم تحديث اسم السورة.")
+    bot.send_message(m.chat.id, "✅ تم التحديث، اضغطي تحديث القائمة.")
 
 @bot.message_handler(commands=['start'])
 def start(m):
