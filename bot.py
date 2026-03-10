@@ -1,11 +1,12 @@
 import telebot
 from telebot import types
+from datetime import datetime, timedelta
 from flask import Flask
 from threading import Thread
 
 app = Flask('')
 @app.route('/')
-def home(): return "Bot is Ready!"
+def home(): return "Bot is Online with Hijri Date!"
 def run(): app.run(host='0.0.0.0', port=8080)
 Thread(target=run).start()
 
@@ -20,12 +21,27 @@ data = {
     'extra_open': False 
 }
 
+def get_hijri_date():
+    # حساب التاريخ الميلادي والهجري يدوياً لتجنب أعطال Render
+    today = datetime.utcnow() + timedelta(hours=3) # توقيت مكة
+    days_ar = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"]
+    day_name = days_ar[(today.weekday() + 1) % 7]
+    
+    # معادلة تقريبية دقيقة لشهر رمضان 1447هـ
+    hijri_day = today.day + 11 
+    if hijri_day > 30: hijri_day -= 30
+    
+    m_date = today.strftime("%d مارس 2026")
+    return f"📅 {day_name} {m_date} م\n🌙 {hijri_day} رمضان 1447 هـ"
+
 def get_text():
-    # تنسيق العبارة مع الاقتباس
+    # إضافة النقوش والزينة والتاريخ
     t = "❄️ <b>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ</b> ❄️\n"
     t += "🌿 <b>مَجْلِسُ تِلَاوَةِ القُرْآنِ الكريم</b> 🌿\n\n"
+    t += f"{get_hijri_date()}\n"
+    t += " 🔅┈┈┈•●◈💠◈●•┈┈┈🔅\n\n" # النقوش المطلوبة
     t += "<blockquote>📖 اعْلَمِي رَعَاكِ اللَّه؛ أَنَّ حُضُورَكِ لِهَذَا المَجْلِسِ مَحْضُ تَوْفِيقٍ وَاصْطِفَاءٍ مِنْ رَبِّكِ.. فَكَمْ مِنْ مَحْرُومٍ وَالقُرْآنُ بَيْنَ يَدَيْهِ، وَكَمْ مِنْ مُوَفَّقٍ يُسَاقُ الخَيْرُ إِلَيْهِ!</blockquote>\n"
-    t += "━━━━━━━━━━━━━\n\n"
+    t += " 🔅┈┈┈•●◈💠◈●•┈┈┈🔅\n\n"
     t += f"📍 <b>السُّورَةُ الحَالِيَّةُ:</b> {data['surah']}\n"
     t += "━━━━━━━━━━━━━\n\n"
     
@@ -50,6 +66,9 @@ def get_text():
     else:
         for i, p in enumerate(data['listeners'], 1):
             t += f"{i}- <a href='tg://user?id={p['id']}'>{p['name']}</a> 🌿\n"
+    
+    t += "\n 🔅┈┈┈•●◈💠◈●•┈┈┈🔅\n"
+    t += "اللهم اجعلنا ممن يقال لهم:\n<b>(اقرأ وارتقِ ورتل كما كنت ترتل في الدنيا)</b>"
     return t
 
 def main_menu():
@@ -87,46 +106,37 @@ def handle_calls(c):
     elif c.data == "reg":
         if not any(p['id'] == u_id and p['type'] == 'main' for p in data['readers']):
             data['readers'].append({'id': u_id, 'name': u_name, 'done': False, 'type': 'main'})
-            bot.answer_callback_query(c.id, "تم تسجيلكِ في القائمة الأساسية")
-
+    
     elif c.data == "add_extra":
         data['readers'].append({'id': u_id, 'name': u_name, 'done': False, 'type': 'extra'})
-        bot.answer_callback_query(c.id, "تم إضافة دور إضافي لكِ ✨")
+        bot.answer_callback_query(c.id, "تم إضافة دور إضافي ✨")
 
-    # ميزة "أتممت القراءة" بالترتيب (أساسي ثم إضافي 1 ثم إضافي 2...)
     elif c.data == "done":
         found = False
-        # نبحث أولاً في الأدوار الأساسية
         for p in data['readers']:
             if p['id'] == u_id and p['type'] == 'main' and not p['done']:
                 p['done'] = True
-                found = True
-                bot.answer_callback_query(c.id, "تم إنهاء دوركِ الأساسي ✅")
-                break
-        # إذا لم نجد دور أساسي مفتوح، نبحث في الأدوار الإضافية بالترتيب
+                found = True; break
         if not found:
             for p in data['readers']:
                 if p['id'] == u_id and p['type'] == 'extra' and not p['done']:
                     p['done'] = True
-                    found = True
-                    bot.answer_callback_query(c.id, "تم إنهاء دور إضافي ✅")
-                    break
-        if not found:
-            bot.answer_callback_query(c.id, "لا توجد أدوار مفتوحة باسمكِ!")
-
-    elif c.data == "listn":
-        if not any(p['id'] == u_id for p in data['listeners']):
-            data['readers'] = [p for p in data['readers'] if p['id'] != u_id]
-            data['listeners'].append({'id': u_id, 'name': u_name})
-            bot.answer_callback_query(c.id, "تم تسجيلكِ كمستمعة 🌿")
+                    found = True; break
+        if found: bot.answer_callback_query(c.id, "✅")
 
     elif c.data == "admin_panel":
         m = types.InlineKeyboardMarkup()
         txt = "🔴 غلق الإضافي" if data['extra_open'] else "🟢 فتح الإضافي"
         m.add(types.InlineKeyboardButton(txt, callback_data="toggle_extra"))
+        m.add(types.InlineKeyboardButton("↕️ ترتيب الأسماء", callback_data="sort_names")) # زر الترتيب المطلوب
         m.add(types.InlineKeyboardButton("🧨 تصفير شامل", callback_data="reset_all"))
         m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_main"))
         return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
+
+    elif c.data == "sort_names":
+        # ترتيب القارئات أبجدياً حسب النوع
+        data['readers'].sort(key=lambda x: x['name'])
+        bot.answer_callback_query(c.id, "تم ترتيب الأسماء أبجدياً ↕️")
 
     elif c.data == "toggle_extra":
         data['extra_open'] = not data['extra_open']
@@ -144,8 +154,7 @@ def handle_calls(c):
     elif c.data == "del_extra":
         for i in range(len(data['readers'])-1, -1, -1):
             if data['readers'][i]['id'] == u_id and data['readers'][i]['type'] == 'extra':
-                data['readers'].pop(i)
-                break
+                data['readers'].pop(i); break
     elif c.data == "reset_all":
         data['readers'], data['listeners'] = [], []
     
