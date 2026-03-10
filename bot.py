@@ -1,32 +1,37 @@
 import telebot
 from telebot import types
 from datetime import datetime
+from hijri_converter import Gregorian
 from flask import Flask
 from threading import Thread
 
 app = Flask('')
 @app.route('/')
-def home(): return "Bot is Fully Operational!"
+def home(): return "Bot is Green and Safe!"
 def run(): app.run(host='0.0.0.0', port=8080)
 Thread(target=run).start()
 
 TOKEN = '8684986706:AAF6pkJQ8a4N3XeecnnJOXhsJpr8z7gv8bs'
 bot = telebot.TeleBot(TOKEN)
 
-# قاعدة البيانات (أضفنا المستمعات وحالة القفل)
+# قاعدة البيانات
 data = {
-    'readers': [], 
-    'listeners': [], 
+    'readers': [], 'listeners': [], 
     'surah': "قيد التحديد...", 
-    'waiting': False,
-    'open': True,
-    'extra_open': True
+    'waiting': False
 }
 
+def get_date():
+    try:
+        today = datetime.now()
+        h = Gregorian(today.year, today.month, today.day).to_hijri()
+        months_ar = ["محرم", "صفر", "ربيع الأول", "ربيع الثاني", "جمادى الأولى", "جمادى الآخرة", "رجب", "شعبان", "رمضان", "شوال", "ذو القعدة", "ذو الحجة"]
+        return f"{h.day} {months_ar[h.month-1]} {h.year}هـ"
+    except: return datetime.now().strftime("%d/%m/%Y") + " م"
+
 def get_text():
-    d = datetime.now().strftime("%d/%m/%Y")
     t = f"✨ <b>°° مُنظِّم الأدوار °°</b> ✨\n\n"
-    t += f"🗓️ <b>التاريخ:</b> {d} م\n"
+    t += f"🗓️ <b>التاريخ:</b> {get_date()}\n"
     t += f"📖 <b>السُّورة:</b> {data['surah']}\n"
     t += "━━━━━━━ ◈ ◈ ━━━━━━━\n\n"
     
@@ -48,7 +53,7 @@ def get_text():
     t += "اللهم اجعلنا ممن يقال لهم:\n<b>(اقرأ وارتقِ ورتل كما كنت ترتل في الدنيا)</b>"
     return t
 
-def main_menu(uid, cid):
+def main_menu():
     m = types.InlineKeyboardMarkup(row_width=2)
     m.add(types.InlineKeyboardButton("📝 سجل اسمي", callback_data="reg"),
           types.InlineKeyboardButton("❌ حذف اسمي", callback_data="del"))
@@ -68,7 +73,7 @@ def start(m):
 def set_surah(m):
     data['surah'] = m.text
     data['waiting'] = False
-    bot.send_message(m.chat.id, get_text(), parse_mode="HTML", reply_markup=main_menu(m.from_user.id, m.chat.id), disable_web_page_preview=True)
+    bot.send_message(m.chat.id, get_text(), parse_mode="HTML", reply_markup=main_menu(), disable_web_page_preview=True)
 
 @bot.callback_query_handler(func=lambda c: True)
 def calls(c):
@@ -90,26 +95,21 @@ def calls(c):
         data['readers'] = [p for p in data['readers'] if p['id'] != u]
         data['listeners'] = [p for p in data['listeners'] if p['id'] != u]
     elif c.data == "ref":
-        bot.answer_callback_query(c.id, "تم التحديث ✅")
+        pass # التحديث يحصل تلقائياً تحت
     elif c.data == "reset":
         data['readers'], data['listeners'] = [], []
-        bot.answer_callback_query(c.id, "تم التصفير 🧨")
-    
-    # قائمة الإعدادات (فيها الترتيب والتصفير)
     elif c.data == "admin":
         m = types.InlineKeyboardMarkup()
-        m.add(types.InlineKeyboardButton("↕️ ترتيب الأسماء", callback_data="sort"))
-        m.add(types.InlineKeyboardButton("🧨 تصفير شامل", callback_data="reset"))
+        m.add(types.InlineKeyboardButton("↕️ ترتيب الأسماء", callback_data="sort"),
+              types.InlineKeyboardButton("🧨 تصفير شامل", callback_data="reset"))
         m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="ref"))
         return bot.edit_message_reply_markup(cid, c.message.message_id, reply_markup=m)
-    
     elif c.data == "sort":
         m = types.InlineKeyboardMarkup()
         for i, p in enumerate(data['readers']):
             m.add(types.InlineKeyboardButton(p['name'], callback_data=f"pk:{i}"))
         m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="admin"))
         return bot.edit_message_reply_markup(cid, c.message.message_id, reply_markup=m)
-    
     elif c.data.startswith("pk:"):
         idx = c.data.split(":")[1]
         m = types.InlineKeyboardMarkup()
@@ -117,7 +117,6 @@ def calls(c):
               types.InlineKeyboardButton("🔽 خفض", callback_data=f"mv:{idx}:down"))
         m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="sort"))
         return bot.edit_message_reply_markup(cid, c.message.message_id, reply_markup=m)
-
     elif c.data.startswith("mv:"):
         _, idx, dr = c.data.split(":")
         idx = int(idx)
@@ -127,7 +126,7 @@ def calls(c):
         return calls(types.CallbackQuery(c.id, c.from_user, c.message, c.chat_instance, "sort"))
 
     try:
-        bot.edit_message_text(get_text(), cid, c.message.message_id, parse_mode="HTML", reply_markup=main_menu(u, cid), disable_web_page_preview=True)
+        bot.edit_message_text(get_text(), cid, c.message.message_id, parse_mode="HTML", reply_markup=main_menu(), disable_web_page_preview=True)
     except: pass
 
 bot.infinity_polling()
