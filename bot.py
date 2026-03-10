@@ -6,7 +6,7 @@ from threading import Thread
 
 app = Flask('')
 @app.route('/')
-def home(): return "Bot is Ready for Manual Sorting!"
+def home(): return "Bot is Fixed & Responsive!"
 def run(): app.run(host='0.0.0.0', port=8080)
 Thread(target=run).start()
 
@@ -25,6 +25,7 @@ def get_hijri_date():
     today = datetime.utcnow() + timedelta(hours=3)
     days_ar = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"]
     day_name = days_ar[(today.weekday() + 1) % 7]
+    # تثبيت التاريخ على 20 رمضان بناءً على طلبك
     hijri_day = today.day + 10 
     if hijri_day > 30: hijri_day -= 30
     m_date = today.strftime("%d مارس 2026")
@@ -34,18 +35,18 @@ def get_text():
     t = "❄️ <b>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ</b> ❄️\n"
     t += "🌿 <b>مَجْلِسُ تِلَاوَةِ القُرْآنِ الكريم</b> 🌿\n\n"
     t += f"{get_hijri_date()}\n"
-    t += " 🔅┈┈┈•●◈💠◈●•┈┈┈🔅\n\n"
+    t += "☀️ ┈┈┈•●◈💠◈●•┈┈┈ ☀️\n\n"
     t += "<blockquote>📖 اعْلَمِي رَعَاكِ اللَّه؛ أَنَّ حُضُورَكِ لِهَذَا المَجْلِسِ مَحْضُ تَوْفِيقٍ وَاصْطِفَاءٍ مِنْ رَبِّكِ.. فَكَمْ مِنْ مَحْرُومٍ وَالقُرْآنُ بَيْنَ يَدَيْهِ، وَكَمْ مِنْ مُوَفَّقٍ يُسَاقُ الخَيْرُ إِلَيْهِ!</blockquote>\n"
-    t += " 🔅┈┈┈•●◈💠◈●•┈┈┈🔅\n\n"
+    t += "☀️ ┈┈┈•●◈💠◈●•┈┈┈ ☀️\n\n"
     t += f"📍 <b>السُّورَةُ الحَالِيَّةُ:</b> {data['surah']}\n"
     t += "━━━━━━━━━━━━━\n\n"
     
     t += "🌷 <b><u>قَائِمَةُ القَارِئَاتِ:</u></b>\n"
-    readers = [p for p in data['readers'] if p['type'] == 'main']
-    if not readers: t += "لا يوجد مسجلات بعد..\n"
+    mains = [p for p in data['readers'] if p['type'] == 'main']
+    if not mains: t += "لا يوجد مسجلات بعد..\n"
     else:
-        for i, p in enumerate(readers, 1):
-            s = "✅" if p['done'] else "⏳"
+        for i, p in enumerate(mains, 1):
+            s = "✅" if p['done'] else "⌛"
             t += f"{i}- <a href='tg://user?id={p['id']}'>{p['name']}</a> {s}\n"
             
     t += "\n🌿 <b><u>الأدوار الإضافية:</u></b>\n"
@@ -53,7 +54,7 @@ def get_text():
     if not extras: t += "لا يوجد مسجلات بعد..\n"
     else:
         for i, p in enumerate(extras, 1):
-            s = "✅" if p['done'] else "⏳"
+            s = "✅" if p['done'] else "⌛"
             t += f"{i}- <a href='tg://user?id={p['id']}'>{p['name']}</a> {s}\n"
 
     t += "\n🌷 <b><u>المُسْتَمِعَاتُ:</u></b>\n"
@@ -62,7 +63,7 @@ def get_text():
         for i, p in enumerate(data['listeners'], 1):
             t += f"{i}- <a href='tg://user?id={p['id']}'>{p['name']}</a> 🌿\n"
     
-    t += "\n 🔅┈┈┈•●◈💠◈●•┈┈┈🔅\n"
+    t += "\n☀️ ┈┈┈•●◈💠◈●•┈┈┈ ☀️\n"
     t += "اللهم اجعلنا ممن يقال لهم:\n<b>(اقرأ وارتقِ ورتل كما كنت ترتل في الدنيا)</b>"
     return t
 
@@ -74,7 +75,7 @@ def main_menu():
           types.InlineKeyboardButton("🎧 مستمعة", callback_data="listn"))
     if data['extra_open']:
         m.add(types.InlineKeyboardButton("🌸 اخذ دور اضافي", callback_data="add_extra"))
-    m.add(types.InlineKeyboardButton("🔄 تحديث", callback_data="refresh_bot"),
+    m.add(types.InlineKeyboardButton("🔄 تحديث القائمة", callback_data="refresh_bot"),
           types.InlineKeyboardButton("⚙️ الإعدادات", callback_data="admin_panel"))
     return m
 
@@ -114,19 +115,20 @@ def handle_calls(c):
 
     elif c.data == "admin_panel":
         m = types.InlineKeyboardMarkup()
-        m.add(types.InlineKeyboardButton("🟢 فتح/غلق الإضافي", callback_data="toggle_extra"))
-        m.add(types.InlineKeyboardButton("↕️ تقديم/تأخير الأسماء", callback_data="manual_sort"))
+        txt = "🔴 غلق الإضافي" if data['extra_open'] else "🟢 فتح الإضافي"
+        m.add(types.InlineKeyboardButton(txt, callback_data="toggle_extra"))
+        m.add(types.InlineKeyboardButton("↕️ تقديم وتأخير الأسماء", callback_data="manual_sort"))
         m.add(types.InlineKeyboardButton("🧨 تصفير شامل", callback_data="reset_all"))
         m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_main"))
         return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
 
-    # نظام الترتيب اليدوي (Manual Sort)
+    # إصلاح نظام الترتيب ليعمل فوراً
     elif c.data == "manual_sort":
         m = types.InlineKeyboardMarkup()
         for i, p in enumerate(data['readers']):
-            t_label = "(إضافي)" if p['type'] == 'extra' else "(أساسي)"
-            m.add(types.InlineKeyboardButton(f"{p['name']} {t_label}", callback_data=f"sel_{i}"))
-        m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="admin_panel"))
+            tag = " (إضافي)" if p['type'] == 'extra' else ""
+            m.add(types.InlineKeyboardButton(f"{p['name']}{tag}", callback_data=f"sel_{i}"))
+        m.add(types.InlineKeyboardButton("⬅️ رجوع للوحة", callback_data="admin_panel"))
         return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
 
     elif c.data.startswith("sel_"):
@@ -141,12 +143,14 @@ def handle_calls(c):
         idx = int(c.data.split("_")[1])
         if idx > 0:
             data['readers'][idx], data['readers'][idx-1] = data['readers'][idx-1], data['readers'][idx]
+            bot.answer_callback_query(c.id, "تم التقديم ⬆️")
         return handle_calls(types.CallbackQuery(c.id, c.from_user, c.message, c.chat_instance, "manual_sort"))
 
     elif c.data.startswith("down_"):
         idx = int(c.data.split("_")[1])
         if idx < len(data['readers']) - 1:
             data['readers'][idx], data['readers'][idx+1] = data['readers'][idx+1], data['readers'][idx]
+            bot.answer_callback_query(c.id, "تم التأخير ⬇️")
         return handle_calls(types.CallbackQuery(c.id, c.from_user, c.message, c.chat_instance, "manual_sort"))
 
     elif c.data == "toggle_extra":
