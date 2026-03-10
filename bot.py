@@ -6,7 +6,7 @@ from threading import Thread
 
 app = Flask('')
 @app.route('/')
-def home(): return "Bot is Online with Hijri Date!"
+def home(): return "Bot is Online with Correct Hijri Date!"
 def run(): app.run(host='0.0.0.0', port=8080)
 Thread(target=run).start()
 
@@ -22,24 +22,24 @@ data = {
 }
 
 def get_hijri_date():
-    # حساب التاريخ الميلادي والهجري يدوياً لتجنب أعطال Render
+    # حساب التاريخ الميلادي والهجري يدوياً
     today = datetime.utcnow() + timedelta(hours=3) # توقيت مكة
     days_ar = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"]
     day_name = days_ar[(today.weekday() + 1) % 7]
     
-    # معادلة تقريبية دقيقة لشهر رمضان 1447هـ
-    hijri_day = today.day + 11 
+    # تعديل الحساب ليكون اليوم 20 رمضان 1447هـ
+    hijri_day = today.day + 10 
     if hijri_day > 30: hijri_day -= 30
     
     m_date = today.strftime("%d مارس 2026")
     return f"📅 {day_name} {m_date} م\n🌙 {hijri_day} رمضان 1447 هـ"
 
 def get_text():
-    # إضافة النقوش والزينة والتاريخ
+    # تنسيق الزينة والعبارة
     t = "❄️ <b>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ</b> ❄️\n"
     t += "🌿 <b>مَجْلِسُ تِلَاوَةِ القُرْآنِ الكريم</b> 🌿\n\n"
     t += f"{get_hijri_date()}\n"
-    t += " 🔅┈┈┈•●◈💠◈●•┈┈┈🔅\n\n" # النقوش المطلوبة
+    t += " 🔅┈┈┈•●◈💠◈●•┈┈┈🔅\n\n"
     t += "<blockquote>📖 اعْلَمِي رَعَاكِ اللَّه؛ أَنَّ حُضُورَكِ لِهَذَا المَجْلِسِ مَحْضُ تَوْفِيقٍ وَاصْطِفَاءٍ مِنْ رَبِّكِ.. فَكَمْ مِنْ مَحْرُومٍ وَالقُرْآنُ بَيْنَ يَدَيْهِ، وَكَمْ مِنْ مُوَفَّقٍ يُسَاقُ الخَيْرُ إِلَيْهِ!</blockquote>\n"
     t += " 🔅┈┈┈•●◈💠◈●•┈┈┈🔅\n\n"
     t += f"📍 <b>السُّورَةُ الحَالِيَّةُ:</b> {data['surah']}\n"
@@ -128,13 +128,12 @@ def handle_calls(c):
         m = types.InlineKeyboardMarkup()
         txt = "🔴 غلق الإضافي" if data['extra_open'] else "🟢 فتح الإضافي"
         m.add(types.InlineKeyboardButton(txt, callback_data="toggle_extra"))
-        m.add(types.InlineKeyboardButton("↕️ ترتيب الأسماء", callback_data="sort_names")) # زر الترتيب المطلوب
+        m.add(types.InlineKeyboardButton("↕️ ترتيب الأسماء", callback_data="sort_names"))
         m.add(types.InlineKeyboardButton("🧨 تصفير شامل", callback_data="reset_all"))
         m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_main"))
         return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
 
     elif c.data == "sort_names":
-        # ترتيب القارئات أبجدياً حسب النوع
         data['readers'].sort(key=lambda x: x['name'])
         bot.answer_callback_query(c.id, "تم ترتيب الأسماء أبجدياً ↕️")
 
