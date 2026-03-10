@@ -5,23 +5,23 @@ from threading import Thread
 
 app = Flask('')
 @app.route('/')
-def home(): return "Bot is Active!"
+def home(): return "Bot is Ready!"
 def run(): app.run(host='0.0.0.0', port=8080)
 Thread(target=run).start()
 
 TOKEN = '8684986706:AAF6pkJQ8a4N3XeecnnJOXhsJpr8z7gv8bs'
 bot = telebot.TeleBot(TOKEN)
 
-# إضافة حالة 'extra_open' للتحكم في ظهور زر الإضافي
 data = {
     'readers': [], 
     'listeners': [], 
     'surah': "قيد التحديد...", 
     'waiting': False,
-    'extra_open': False  # الإضافي مغلق افتراضياً
+    'extra_open': False 
 }
 
 def get_text():
+    # تنسيق العبارة مع الاقتباس
     t = "❄️ <b>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ</b> ❄️\n"
     t += "🌿 <b>مَجْلِسُ تِلَاوَةِ القُرْآنِ الكريم</b> 🌿\n\n"
     t += "<blockquote>📖 اعْلَمِي رَعَاكِ اللَّه؛ أَنَّ حُضُورَكِ لِهَذَا المَجْلِسِ مَحْضُ تَوْفِيقٍ وَاصْطِفَاءٍ مِنْ رَبِّكِ.. فَكَمْ مِنْ مَحْرُومٍ وَالقُرْآنُ بَيْنَ يَدَيْهِ، وَكَمْ مِنْ مُوَفَّقٍ يُسَاقُ الخَيْرُ إِلَيْهِ!</blockquote>\n"
@@ -58,11 +58,8 @@ def main_menu():
           types.InlineKeyboardButton("❌ حذف اسمي", callback_data="ask_del"))
     m.add(types.InlineKeyboardButton("✅ أتممت القراءة", callback_data="done"),
           types.InlineKeyboardButton("🎧 مستمعة", callback_data="listn"))
-    
-    # لا يظهر زر "اخذ دور اضافي" إلا إذا فعلته المشرفة
     if data['extra_open']:
         m.add(types.InlineKeyboardButton("🌸 اخذ دور اضافي", callback_data="add_extra"))
-        
     m.add(types.InlineKeyboardButton("🔄 تحديث", callback_data="refresh_bot"),
           types.InlineKeyboardButton("⚙️ الإعدادات", callback_data="admin_panel"))
     return m
@@ -92,23 +89,36 @@ def handle_calls(c):
             data['readers'].append({'id': u_id, 'name': u_name, 'done': False, 'type': 'main'})
             bot.answer_callback_query(c.id, "تم تسجيلكِ في القائمة الأساسية")
 
-    # زر الإضافي يسجل دور جديد دون حذف القديم
     elif c.data == "add_extra":
         data['readers'].append({'id': u_id, 'name': u_name, 'done': False, 'type': 'extra'})
         bot.answer_callback_query(c.id, "تم إضافة دور إضافي لكِ ✨")
 
+    # ميزة "أتممت القراءة" بالترتيب (أساسي ثم إضافي 1 ثم إضافي 2...)
+    elif c.data == "done":
+        found = False
+        # نبحث أولاً في الأدوار الأساسية
+        for p in data['readers']:
+            if p['id'] == u_id and p['type'] == 'main' and not p['done']:
+                p['done'] = True
+                found = True
+                bot.answer_callback_query(c.id, "تم إنهاء دوركِ الأساسي ✅")
+                break
+        # إذا لم نجد دور أساسي مفتوح، نبحث في الأدوار الإضافية بالترتيب
+        if not found:
+            for p in data['readers']:
+                if p['id'] == u_id and p['type'] == 'extra' and not p['done']:
+                    p['done'] = True
+                    found = True
+                    bot.answer_callback_query(c.id, "تم إنهاء دور إضافي ✅")
+                    break
+        if not found:
+            bot.answer_callback_query(c.id, "لا توجد أدوار مفتوحة باسمكِ!")
+
     elif c.data == "listn":
         if not any(p['id'] == u_id for p in data['listeners']):
+            data['readers'] = [p for p in data['readers'] if p['id'] != u_id]
             data['listeners'].append({'id': u_id, 'name': u_name})
             bot.answer_callback_query(c.id, "تم تسجيلكِ كمستمعة 🌿")
-
-    elif c.data == "done":
-        # يحدد "تم" لآخر دور لم ينتهِ بعد للشخص
-        for p in reversed(data['readers']):
-            if p['id'] == u_id and not p['done']:
-                p['done'] = True
-                bot.answer_callback_query(c.id, "هنيئاً لكِ التلاوة ✅")
-                break
 
     elif c.data == "admin_panel":
         m = types.InlineKeyboardMarkup()
@@ -120,7 +130,6 @@ def handle_calls(c):
 
     elif c.data == "toggle_extra":
         data['extra_open'] = not data['extra_open']
-        bot.answer_callback_query(c.id, "تم تغيير حالة التسجيل الإضافي")
         return handle_calls(types.CallbackQuery(c.id, c.from_user, c.message, c.chat_instance, "admin_panel"))
 
     elif c.data == "ask_del":
@@ -133,7 +142,6 @@ def handle_calls(c):
     elif c.data == "del_main":
         data['readers'] = [p for p in data['readers'] if not (p['id'] == u_id and p['type'] == 'main')]
     elif c.data == "del_extra":
-        # يحذف آخر دور إضافي فقط
         for i in range(len(data['readers'])-1, -1, -1):
             if data['readers'][i]['id'] == u_id and data['readers'][i]['type'] == 'extra':
                 data['readers'].pop(i)
