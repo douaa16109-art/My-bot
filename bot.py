@@ -1,53 +1,43 @@
 import telebot
 from telebot import types
 from datetime import datetime
-from hijri_converter import Gregorian
 from flask import Flask
 from threading import Thread
 
+# سيرفر البقاء حياً (لتحويل UptimeRobot للأخضر)
 app = Flask('')
 @app.route('/')
-def home(): return "Bot is Green and Safe!"
+def home(): return "Bot is Online!"
 def run(): app.run(host='0.0.0.0', port=8080)
 Thread(target=run).start()
 
 TOKEN = '8684986706:AAF6pkJQ8a4N3XeecnnJOXhsJpr8z7gv8bs'
 bot = telebot.TeleBot(TOKEN)
 
-# قاعدة البيانات
-data = {
-    'readers': [], 'listeners': [], 
-    'surah': "قيد التحديد...", 
-    'waiting': False
-}
-
-def get_date():
-    try:
-        today = datetime.now()
-        h = Gregorian(today.year, today.month, today.day).to_hijri()
-        months_ar = ["محرم", "صفر", "ربيع الأول", "ربيع الثاني", "جمادى الأولى", "جمادى الآخرة", "رجب", "شعبان", "رمضان", "شوال", "ذو القعدة", "ذو الحجة"]
-        return f"{h.day} {months_ar[h.month-1]} {h.year}هـ"
-    except: return datetime.now().strftime("%d/%m/%Y") + " م"
+# البيانات
+data = {'readers': [], 'listeners': [], 'surah': "قيد التحديد...", 'waiting': False}
 
 def get_text():
+    d = datetime.now().strftime("%d/%m/%Y")
+    # تنسيق فخم يشبه الصورة التي أرسلتها
     t = f"✨ <b>°° مُنظِّم الأدوار °°</b> ✨\n\n"
-    t += f"🗓️ <b>التاريخ:</b> {get_date()}\n"
+    t += f"🗓️ <b>التاريخ:</b> {d} م\n"
     t += f"📖 <b>السُّورة:</b> {data['surah']}\n"
     t += "━━━━━━━ ◈ ◈ ━━━━━━━\n\n"
     
-    t += "🌙 <b>المسجلات للقراءة:</b>\n"
-    if not data['readers']: t += "⏳ في انتظار التسجيل..\n"
+    t += "🌙 <b><u>المسجلات للقراءة:</u></b>\n"
+    if not data['readers']: t += "لا توجد مسجلات حالياً..\n"
     else:
         for i, p in enumerate(data['readers'], 1):
             s = "✅" if p['done'] else "⏳"
             tag = " (إضافي)" if p['extra'] else ""
-            t += f"{i:02} - <a href='tg://user?id={p['id']}'>{p['name']}</a>{tag} {s}\n"
+            t += f"{i:02}- <a href='tg://user?id={p['id']}'>{p['name']}</a>{tag} {s}\n"
             
-    t += "\n🎧 <b>المستمعات:</b>\n"
+    t += "\n🎧 <b><u>المستمعات:</u></b>\n"
     if not data['listeners']: t += "لا توجد مستمعات.\n"
     else:
         for i, p in enumerate(data['listeners'], 1):
-            t += f"{i:02} - <a href='tg://user?id={p['id']}'>{p['name']}</a> 🌿\n"
+            t += f"{i:02}- <a href='tg://user?id={p['id']}'>{p['name']}</a> 🌿\n"
 
     t += "\n━━━━━━━ ◈ ◈ ━━━━━━━\n"
     t += "اللهم اجعلنا ممن يقال لهم:\n<b>(اقرأ وارتقِ ورتل كما كنت ترتل في الدنيا)</b>"
@@ -78,26 +68,18 @@ def set_surah(m):
 @bot.callback_query_handler(func=lambda c: True)
 def calls(c):
     u, n, cid = c.from_user.id, c.from_user.first_name, c.message.chat.id
-    
-    if c.data == "reg":
-        if not any(p['id']==u for p in data['readers']):
-            data['readers'].append({'id':u, 'name':n, 'done':False, 'extra':False})
-    elif c.data == "extra":
-        if not any(p['id']==u for p in data['readers']):
-            data['readers'].append({'id':u, 'name':n, 'done':False, 'extra':True})
-    elif c.data == "listn":
-        if not any(p['id']==u for p in data['listeners']):
-            data['listeners'].append({'id':u, 'name':n})
+    if c.data == "reg" and not any(p['id']==u for p in data['readers']):
+        data['readers'].append({'id':u, 'name':n, 'done':False, 'extra':False})
+    elif c.data == "extra" and not any(p['id']==u for p in data['readers']):
+        data['readers'].append({'id':u, 'name':n, 'done':False, 'extra':True})
+    elif c.data == "listn" and not any(p['id']==u for p in data['listeners']):
+        data['listeners'].append({'id':u, 'name':n})
     elif c.data == "done":
         for p in data['readers']:
             if p['id'] == u: p['done'] = True
     elif c.data == "del":
         data['readers'] = [p for p in data['readers'] if p['id'] != u]
         data['listeners'] = [p for p in data['listeners'] if p['id'] != u]
-    elif c.data == "ref":
-        pass # التحديث يحصل تلقائياً تحت
-    elif c.data == "reset":
-        data['readers'], data['listeners'] = [], []
     elif c.data == "admin":
         m = types.InlineKeyboardMarkup()
         m.add(types.InlineKeyboardButton("↕️ ترتيب الأسماء", callback_data="sort"),
@@ -111,7 +93,7 @@ def calls(c):
         m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="admin"))
         return bot.edit_message_reply_markup(cid, c.message.message_id, reply_markup=m)
     elif c.data.startswith("pk:"):
-        idx = c.data.split(":")[1]
+        idx = int(c.data.split(":")[1])
         m = types.InlineKeyboardMarkup()
         m.add(types.InlineKeyboardButton("🔼 رفع", callback_data=f"mv:{idx}:up"),
               types.InlineKeyboardButton("🔽 خفض", callback_data=f"mv:{idx}:down"))
@@ -124,6 +106,8 @@ def calls(c):
         if dr=="up" and idx>0: l[idx], l[idx-1] = l[idx-1], l[idx]
         elif dr=="down" and idx<len(l)-1: l[idx], l[idx+1] = l[idx+1], l[idx]
         return calls(types.CallbackQuery(c.id, c.from_user, c.message, c.chat_instance, "sort"))
+    elif c.data == "reset":
+        data['readers'], data['listeners'] = [], []
 
     try:
         bot.edit_message_text(get_text(), cid, c.message.message_id, parse_mode="HTML", reply_markup=main_menu(), disable_web_page_preview=True)
