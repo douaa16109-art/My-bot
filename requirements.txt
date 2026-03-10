@@ -1,3 +1,3 @@
 pyTelegramBotAPI
 flask
-hijri_converter
+hijri-converter
