@@ -6,32 +6,38 @@ from threading import Thread
 
 app = Flask('')
 @app.route('/')
-def home(): return "Bot is Fixed & Responsive!"
+def home(): return "Bot is Online - Unified List!"
 def run(): app.run(host='0.0.0.0', port=8080)
 Thread(target=run).start()
 
 TOKEN = '8684986706:AAF6pkJQ8a4N3XeecnnJOXhsJpr8z7gv8bs'
 bot = telebot.TeleBot(TOKEN)
 
-data = {
-    'readers': [], 
-    'listeners': [], 
-    'surah': "قيد التحديد...", 
-    'waiting': False,
-    'extra_open': False 
-}
+# قاعدة بيانات مستقلة لكل مجموعة
+groups_data = {}
+
+def get_group_data(chat_id):
+    if chat_id not in groups_data:
+        groups_data[chat_id] = {
+            'readers': [], 
+            'listeners': [], 
+            'surah': "قيد التحديد...", 
+            'waiting': False,
+            'extra_open': False 
+        }
+    return groups_data[chat_id]
 
 def get_hijri_date():
     today = datetime.utcnow() + timedelta(hours=3)
     days_ar = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"]
     day_name = days_ar[(today.weekday() + 1) % 7]
-    # تثبيت التاريخ على 20 رمضان بناءً على طلبك
     hijri_day = today.day + 10 
     if hijri_day > 30: hijri_day -= 30
     m_date = today.strftime("%d مارس 2026")
     return f"📅 {day_name} {m_date} م\n🌙 {hijri_day} رمضان 1447 هـ"
 
-def get_text():
+def get_text(chat_id):
+    data = get_group_data(chat_id)
     t = "❄️ <b>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ</b> ❄️\n"
     t += "🌿 <b>مَجْلِسُ تِلَاوَةِ القُرْآنِ الكريم</b> 🌿\n\n"
     t += f"{get_hijri_date()}\n"
@@ -41,21 +47,15 @@ def get_text():
     t += f"📍 <b>السُّورَةُ الحَالِيَّةُ:</b> {data['surah']}\n"
     t += "━━━━━━━━━━━━━\n\n"
     
+    # قائمة القارئات الموحدة (أساسي + إضافي)
     t += "🌷 <b><u>قَائِمَةُ القَارِئَاتِ:</u></b>\n"
-    mains = [p for p in data['readers'] if p['type'] == 'main']
-    if not mains: t += "لا يوجد مسجلات بعد..\n"
+    if not data['readers']:
+        t += "لا يوجد مسجلات بعد..\n"
     else:
-        for i, p in enumerate(mains, 1):
+        for i, p in enumerate(data['readers'], 1):
             s = "✅" if p['done'] else "⌛"
-            t += f"{i}- <a href='tg://user?id={p['id']}'>{p['name']}</a> {s}\n"
-            
-    t += "\n🌿 <b><u>الأدوار الإضافية:</u></b>\n"
-    extras = [p for p in data['readers'] if p['type'] == 'extra']
-    if not extras: t += "لا يوجد مسجلات بعد..\n"
-    else:
-        for i, p in enumerate(extras, 1):
-            s = "✅" if p['done'] else "⌛"
-            t += f"{i}- <a href='tg://user?id={p['id']}'>{p['name']}</a> {s}\n"
+            tag = " (إضافي)" if p['type'] == 'extra' else ""
+            t += f"{i}- <a href='tg://user?id={p['id']}'>{p['name']}</a>{tag} {s}\n"
 
     t += "\n🌷 <b><u>المُسْتَمِعَاتُ:</u></b>\n"
     if not data['listeners']: t += "لا يوجد..\n"
@@ -67,7 +67,8 @@ def get_text():
     t += "اللهم اجعلنا ممن يقال لهم:\n<b>(اقرأ وارتقِ ورتل كما كنت ترتل في الدنيا)</b>"
     return t
 
-def main_menu():
+def main_menu(chat_id):
+    data = get_group_data(chat_id)
     m = types.InlineKeyboardMarkup(row_width=2)
     m.add(types.InlineKeyboardButton("📝 سجل اسمي", callback_data="reg"),
           types.InlineKeyboardButton("❌ حذف اسمي", callback_data="ask_del"))
@@ -81,36 +82,44 @@ def main_menu():
 
 @bot.message_handler(commands=['start'])
 def start(m):
+    data = get_group_data(m.chat.id)
     data['waiting'] = True
-    bot.send_message(m.chat.id, "📝 حياكِ الله يا مشرفة.. اكتبي اسم السورة الآن:")
+    bot.send_message(m.chat.id, "📝 حياكِ الله يا مشرفة.. اكتبي اسم السورة لهذه المجموعة:")
 
-@bot.message_handler(func=lambda m: data['waiting'])
+@bot.message_handler(func=lambda m: get_group_data(m.chat.id)['waiting'])
 def set_surah(m):
+    data = get_group_data(m.chat.id)
     data['surah'] = m.text
     data['waiting'] = False
-    bot.send_message(m.chat.id, get_text(), parse_mode="HTML", reply_markup=main_menu())
+    bot.send_message(m.chat.id, get_text(m.chat.id), parse_mode="HTML", reply_markup=main_menu(m.chat.id))
 
 @bot.callback_query_handler(func=lambda c: True)
 def handle_calls(c):
-    u_id, u_name, chat_id = c.from_user.id, c.from_user.first_name, c.message.chat.id
+    chat_id = c.message.chat.id
+    data = get_group_data(chat_id)
+    u_id, u_name = c.from_user.id, c.from_user.first_name
     
     if c.data == "refresh_bot":
         try: bot.delete_message(chat_id, c.message.message_id)
         except: pass
-        return bot.send_message(chat_id, get_text(), parse_mode="HTML", reply_markup=main_menu())
+        return bot.send_message(chat_id, get_text(chat_id), parse_mode="HTML", reply_markup=main_menu(chat_id))
 
     elif c.data == "reg":
+        # منع تسجيل الاسم كـ "أساسي" أكثر من مرة في نفس المجموعة
         if not any(p['id'] == u_id and p['type'] == 'main' for p in data['readers']):
             data['readers'].append({'id': u_id, 'name': u_name, 'done': False, 'type': 'main'})
     
     elif c.data == "add_extra":
+        # إضافة الاسم مرة أخرى في القائمة كـ "إضافي"
         data['readers'].append({'id': u_id, 'name': u_name, 'done': False, 'type': 'extra'})
+        bot.answer_callback_query(c.id, "تم إضافة دور إضافي لكِ في القائمة ✨")
 
     elif c.data == "done":
+        # ينهي الدور الأول الذي لم يكتمل (سواء أساسي أو إضافي حسب الترتيب)
         for p in data['readers']:
             if p['id'] == u_id and not p['done']:
                 p['done'] = True
-                bot.answer_callback_query(c.id, "✅")
+                bot.answer_callback_query(c.id, "✅ تقبل الله منكِ")
                 break
 
     elif c.data == "admin_panel":
@@ -122,59 +131,44 @@ def handle_calls(c):
         m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_main"))
         return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
 
-    # إصلاح نظام الترتيب ليعمل فوراً
     elif c.data == "manual_sort":
         m = types.InlineKeyboardMarkup()
         for i, p in enumerate(data['readers']):
             tag = " (إضافي)" if p['type'] == 'extra' else ""
-            m.add(types.InlineKeyboardButton(f"{p['name']}{tag}", callback_data=f"sel_{i}"))
-        m.add(types.InlineKeyboardButton("⬅️ رجوع للوحة", callback_data="admin_panel"))
+            m.add(types.InlineKeyboardButton(f"{i+1}- {p['name']}{tag}", callback_data=f"sel_{i}"))
+        m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="admin_panel"))
         return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
 
     elif c.data.startswith("sel_"):
         idx = int(c.data.split("_")[1])
         m = types.InlineKeyboardMarkup()
-        m.add(types.InlineKeyboardButton("⬆️ تقديم (فوق)", callback_data=f"up_{idx}"),
-              types.InlineKeyboardButton("⬇️ تأخير (تحت)", callback_data=f"down_{idx}"))
-        m.add(types.InlineKeyboardButton("⬅️ رجوع للأسماء", callback_data="manual_sort"))
+        m.add(types.InlineKeyboardButton("⬆️ تقديم", callback_data=f"up_{idx}"),
+              types.InlineKeyboardButton("⬇️ تأخير", callback_data=f"down_{idx}"))
+        m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="manual_sort"))
         return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
 
-    elif c.data.startswith("up_"):
-        idx = int(c.data.split("_")[1])
-        if idx > 0:
+    elif c.data.startswith("up_") or c.data.startswith("down_"):
+        cmd, idx = c.data.split("_")
+        idx = int(idx)
+        if cmd == "up" and idx > 0:
             data['readers'][idx], data['readers'][idx-1] = data['readers'][idx-1], data['readers'][idx]
-            bot.answer_callback_query(c.id, "تم التقديم ⬆️")
-        return handle_calls(types.CallbackQuery(c.id, c.from_user, c.message, c.chat_instance, "manual_sort"))
-
-    elif c.data.startswith("down_"):
-        idx = int(c.data.split("_")[1])
-        if idx < len(data['readers']) - 1:
+        elif cmd == "down" and idx < len(data['readers']) - 1:
             data['readers'][idx], data['readers'][idx+1] = data['readers'][idx+1], data['readers'][idx]
-            bot.answer_callback_query(c.id, "تم التأخير ⬇️")
         return handle_calls(types.CallbackQuery(c.id, c.from_user, c.message, c.chat_instance, "manual_sort"))
 
     elif c.data == "toggle_extra":
         data['extra_open'] = not data['extra_open']
         return handle_calls(types.CallbackQuery(c.id, c.from_user, c.message, c.chat_instance, "admin_panel"))
 
+    elif c.data == "reset_all":
+        data['readers'], data['listeners'] = [], []
+
     elif c.data == "ask_del":
         m = types.InlineKeyboardMarkup()
-        m.add(types.InlineKeyboardButton("❌ حذف الأساسي", callback_data="del_main"),
-              types.InlineKeyboardButton("❌ حذف الإضافي", callback_data="del_extra"))
+        m.add(types.InlineKeyboardButton("❌ حذف الدور الأساسي", callback_data="del_main"),
+              types.InlineKeyboardButton("❌ حذف الدور الإضافي", callback_data="del_extra"))
         m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_main"))
         return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
 
     elif c.data == "del_main":
-        data['readers'] = [p for p in data['readers'] if not (p['id'] == u_id and p['type'] == 'main')]
-    elif c.data == "del_extra":
-        for i in range(len(data['readers'])-1, -1, -1):
-            if data['readers'][i]['id'] == u_id and data['readers'][i]['type'] == 'extra':
-                data['readers'].pop(i); break
-    elif c.data == "reset_all":
-        data['readers'], data['listeners'] = [], []
-    
-    try:
-        bot.edit_message_text(get_text(), chat_id, c.message.message_id, parse_mode="HTML", reply_markup=main_menu())
-    except: pass
-
-bot.infinity_polling()
+        data['readers']
