@@ -7,7 +7,7 @@ import time
 
 app = Flask('')
 @app.route('/')
-def home(): return "Bot is Fixed and Smooth!"
+def home(): return "Bot is Fast & Secure!"
 def run(): app.run(host='0.0.0.0', port=8080)
 Thread(target=run).start()
 
@@ -73,6 +73,11 @@ def main_menu(chat_id):
 
 @bot.message_handler(commands=['start'])
 def start(m):
+    # التأكد من أن مرسل الأمر هو مشرف
+    status = bot.get_chat_member(m.chat.id, m.from_user.id).status
+    if status not in ['administrator', 'creator']:
+        return bot.reply_to(m, "⚠️ عذراً، هذا الأمر للمشرفات فقط.")
+    
     data = get_group_data(m.chat.id)
     data['waiting'] = True
     bot.send_message(m.chat.id, "📝 حياكِ الله يا مشرفة.. اكتبي اسم السورة الآن:")
@@ -89,7 +94,12 @@ def handle_calls(c):
     data = get_group_data(chat_id)
     u_id, u_name = c.from_user.id, c.from_user.first_name
     
-    # أهم سطر لمنع التعليق والتكرار
+    # حماية لوحة الإعدادات
+    if c.data in ["admin_panel", "manual_sort", "reset_all", "toggle_extra"]:
+        status = bot.get_chat_member(chat_id, u_id).status
+        if status not in ['administrator', 'creator']:
+            return bot.answer_callback_query(c.id, "⚠️ عذراً، هذه اللوحة للمشرفات فقط.", show_alert=True)
+
     bot.answer_callback_query(c.id)
 
     if c.data == "refresh_bot":
@@ -104,6 +114,12 @@ def handle_calls(c):
     elif c.data == "add_extra":
         data['readers'].append({'id': u_id, 'name': u_name, 'done': False, 'type': 'extra'})
 
+    # تفعيل زر مستمعة
+    elif c.data == "listn":
+        if not any(p['id'] == u_id for p in data['listeners']):
+            data['listeners'].append({'id': u_id, 'name': u_name})
+            bot.answer_callback_query(c.id, "تم تسجيلكِ كمستمعة 🎧")
+
     elif c.data == "done":
         for p in data['readers']:
             if p['id'] == u_id and not p['done']:
@@ -114,8 +130,8 @@ def handle_calls(c):
         m = types.InlineKeyboardMarkup()
         txt = "🔴 غلق الإضافي" if data['extra_open'] else "🟢 فتح الإضافي"
         m.add(types.InlineKeyboardButton(txt, callback_data="toggle_extra"))
-        m.add(types.InlineKeyboardButton("↕️ تقديم وتأخير", callback_data="manual_sort"))
-        m.add(types.InlineKeyboardButton("🧨 تصفير", callback_data="reset_all"))
+        m.add(types.InlineKeyboardButton("↕️ تقديم وتأخير الأسماء", callback_data="manual_sort"))
+        m.add(types.InlineKeyboardButton("🧨 تصفير شامل", callback_data="reset_all"))
         m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_main"))
         return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
 
@@ -124,7 +140,7 @@ def handle_calls(c):
         for i, p in enumerate(data['readers']):
             tag = " (إضافي)" if p['type'] == 'extra' else ""
             m.add(types.InlineKeyboardButton(f"{i+1}- {p['name']}{tag}", callback_data=f"sel_{i}"))
-        m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="admin_panel"))
+        m.add(types.InlineKeyboardButton("⬅️ رجوع للوحة", callback_data="admin_panel"))
         return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
 
     elif c.data.startswith("sel_"):
@@ -132,9 +148,10 @@ def handle_calls(c):
         m = types.InlineKeyboardMarkup()
         m.add(types.InlineKeyboardButton("⬆️ تقديم", callback_data=f"up_{idx}"),
               types.InlineKeyboardButton("⬇️ تأخير", callback_data=f"down_{idx}"))
-        m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="manual_sort"))
+        m.add(types.InlineKeyboardButton("⬅️ رجوع للأسماء", callback_data="manual_sort"))
         return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
 
+    # إصلاح تعليق الترتيب ليكون سريعاً
     elif c.data.startswith(("up_", "down_")):
         cmd, idx = c.data.split("_")
         idx = int(idx)
@@ -142,8 +159,14 @@ def handle_calls(c):
             data['readers'][idx], data['readers'][idx-1] = data['readers'][idx-1], data['readers'][idx]
         elif cmd == "down" and idx < len(data['readers']) - 1:
             data['readers'][idx], data['readers'][idx+1] = data['readers'][idx+1], data['readers'][idx]
-        # العودة لقائمة الترتيب مباشرة دون تعليق
-        return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("جاري الترتيب...", callback_data="ignore")))
+        
+        # العودة للقائمة فوراً دون انتظار
+        m = types.InlineKeyboardMarkup()
+        for i, p in enumerate(data['readers']):
+            tag = " (إضافي)" if p['type'] == 'extra' else ""
+            m.add(types.InlineKeyboardButton(f"{i+1}- {p['name']}{tag}", callback_data=f"sel_{i}"))
+        m.add(types.InlineKeyboardButton("⬅️ رجوع للوحة", callback_data="admin_panel"))
+        return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
 
     elif c.data == "toggle_extra":
         data['extra_open'] = not data['extra_open']
