@@ -3,17 +3,20 @@ from telebot import types
 from datetime import datetime, timedelta
 from flask import Flask
 from threading import Thread
+import time
 
+# إعداد Flask لإبقاء البوت حياً على Render
 app = Flask('')
 @app.route('/')
-def home(): return "Bot is Online - Unified List!"
+def home(): return "Bot is Online and Ready!"
 def run(): app.run(host='0.0.0.0', port=8080)
 Thread(target=run).start()
 
+# ⚠️ تأكدي أن هذا التوكن صحيح ومطابق لبوت فاذر
 TOKEN = '8684986706:AAF6pkJQ8a4N3XeecnnJOXhsJpr8z7gv8bs'
 bot = telebot.TeleBot(TOKEN)
 
-# قاعدة بيانات مستقلة لكل مجموعة
+# قاعدة بيانات المجموعات
 groups_data = {}
 
 def get_group_data(chat_id):
@@ -46,8 +49,6 @@ def get_text(chat_id):
     t += "☀️ ┈┈┈•●◈💠◈●•┈┈┈ ☀️\n\n"
     t += f"📍 <b>السُّورَةُ الحَالِيَّةُ:</b> {data['surah']}\n"
     t += "━━━━━━━━━━━━━\n\n"
-    
-    # قائمة القارئات الموحدة (أساسي + إضافي)
     t += "🌷 <b><u>قَائِمَةُ القَارِئَاتِ:</u></b>\n"
     if not data['readers']:
         t += "لا يوجد مسجلات بعد..\n"
@@ -56,13 +57,11 @@ def get_text(chat_id):
             s = "✅" if p['done'] else "⌛"
             tag = " (إضافي)" if p['type'] == 'extra' else ""
             t += f"{i}- <a href='tg://user?id={p['id']}'>{p['name']}</a>{tag} {s}\n"
-
     t += "\n🌷 <b><u>المُسْتَمِعَاتُ:</u></b>\n"
     if not data['listeners']: t += "لا يوجد..\n"
     else:
         for i, p in enumerate(data['listeners'], 1):
             t += f"{i}- <a href='tg://user?id={p['id']}'>{p['name']}</a> 🌿\n"
-    
     t += "\n☀️ ┈┈┈•●◈💠◈●•┈┈┈ ☀️\n"
     t += "اللهم اجعلنا ممن يقال لهم:\n<b>(اقرأ وارتقِ ورتل كما كنت ترتل في الدنيا)</b>"
     return t
@@ -76,7 +75,7 @@ def main_menu(chat_id):
           types.InlineKeyboardButton("🎧 مستمعة", callback_data="listn"))
     if data['extra_open']:
         m.add(types.InlineKeyboardButton("🌸 اخذ دور اضافي", callback_data="add_extra"))
-    m.add(types.InlineKeyboardButton("🔄 تحديث القائمة", callback_data="refresh_bot"),
+    m.add(types.InlineKeyboardButton("🔄 تحديث", callback_data="refresh_bot"),
           types.InlineKeyboardButton("⚙️ الإعدادات", callback_data="admin_panel"))
     return m
 
@@ -84,9 +83,9 @@ def main_menu(chat_id):
 def start(m):
     data = get_group_data(m.chat.id)
     data['waiting'] = True
-    bot.send_message(m.chat.id, "📝 حياكِ الله يا مشرفة.. اكتبي اسم السورة لهذه المجموعة:")
+    bot.send_message(m.chat.id, "📝 حياكِ الله يا مشرفة.. اكتبي اسم السورة الآن:")
 
-@bot.message_handler(func=lambda m: get_group_data(m.chat.id)['waiting'])
+@bot.message_handler(func=lambda m: get_group_data(m.chat.id).get('waiting', False))
 def set_surah(m):
     data = get_group_data(m.chat.id)
     data['surah'] = m.text
@@ -98,38 +97,34 @@ def handle_calls(c):
     chat_id = c.message.chat.id
     data = get_group_data(chat_id)
     u_id, u_name = c.from_user.id, c.from_user.first_name
-    
+
     if c.data == "refresh_bot":
         try: bot.delete_message(chat_id, c.message.message_id)
         except: pass
-        return bot.send_message(chat_id, get_text(chat_id), parse_mode="HTML", reply_markup=main_menu(chat_id))
+        bot.send_message(chat_id, get_text(chat_id), parse_mode="HTML", reply_markup=main_menu(chat_id))
 
     elif c.data == "reg":
-        # منع تسجيل الاسم كـ "أساسي" أكثر من مرة في نفس المجموعة
         if not any(p['id'] == u_id and p['type'] == 'main' for p in data['readers']):
             data['readers'].append({'id': u_id, 'name': u_name, 'done': False, 'type': 'main'})
     
     elif c.data == "add_extra":
-        # إضافة الاسم مرة أخرى في القائمة كـ "إضافي"
         data['readers'].append({'id': u_id, 'name': u_name, 'done': False, 'type': 'extra'})
-        bot.answer_callback_query(c.id, "تم إضافة دور إضافي لكِ في القائمة ✨")
 
     elif c.data == "done":
-        # ينهي الدور الأول الذي لم يكتمل (سواء أساسي أو إضافي حسب الترتيب)
         for p in data['readers']:
             if p['id'] == u_id and not p['done']:
                 p['done'] = True
-                bot.answer_callback_query(c.id, "✅ تقبل الله منكِ")
+                bot.answer_callback_query(c.id, "✅")
                 break
 
     elif c.data == "admin_panel":
         m = types.InlineKeyboardMarkup()
         txt = "🔴 غلق الإضافي" if data['extra_open'] else "🟢 فتح الإضافي"
         m.add(types.InlineKeyboardButton(txt, callback_data="toggle_extra"))
-        m.add(types.InlineKeyboardButton("↕️ تقديم وتأخير الأسماء", callback_data="manual_sort"))
-        m.add(types.InlineKeyboardButton("🧨 تصفير شامل", callback_data="reset_all"))
+        m.add(types.InlineKeyboardButton("↕️ تقديم وتأخير", callback_data="manual_sort"))
+        m.add(types.InlineKeyboardButton("🧨 تصفير", callback_data="reset_all"))
         m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_main"))
-        return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
+        bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
 
     elif c.data == "manual_sort":
         m = types.InlineKeyboardMarkup()
@@ -137,7 +132,7 @@ def handle_calls(c):
             tag = " (إضافي)" if p['type'] == 'extra' else ""
             m.add(types.InlineKeyboardButton(f"{i+1}- {p['name']}{tag}", callback_data=f"sel_{i}"))
         m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="admin_panel"))
-        return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
+        bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
 
     elif c.data.startswith("sel_"):
         idx = int(c.data.split("_")[1])
@@ -145,7 +140,7 @@ def handle_calls(c):
         m.add(types.InlineKeyboardButton("⬆️ تقديم", callback_data=f"up_{idx}"),
               types.InlineKeyboardButton("⬇️ تأخير", callback_data=f"down_{idx}"))
         m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="manual_sort"))
-        return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
+        bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
 
     elif c.data.startswith("up_") or c.data.startswith("down_"):
         cmd, idx = c.data.split("_")
@@ -154,21 +149,20 @@ def handle_calls(c):
             data['readers'][idx], data['readers'][idx-1] = data['readers'][idx-1], data['readers'][idx]
         elif cmd == "down" and idx < len(data['readers']) - 1:
             data['readers'][idx], data['readers'][idx+1] = data['readers'][idx+1], data['readers'][idx]
-        return handle_calls(types.CallbackQuery(c.id, c.from_user, c.message, c.chat_instance, "manual_sort"))
+        handle_calls(types.CallbackQuery(c.id, c.from_user, c.message, c.chat_instance, "manual_sort"))
 
     elif c.data == "toggle_extra":
         data['extra_open'] = not data['extra_open']
-        return handle_calls(types.CallbackQuery(c.id, c.from_user, c.message, c.chat_instance, "admin_panel"))
+        handle_calls(types.CallbackQuery(c.id, c.from_user, c.message, c.chat_instance, "admin_panel"))
 
     elif c.data == "reset_all":
         data['readers'], data['listeners'] = [], []
+    
+    try:
+        bot.edit_message_text(get_text(chat_id), chat_id, c.message.message_id, parse_mode="HTML", reply_markup=main_menu(chat_id))
+    except: pass
 
-    elif c.data == "ask_del":
-        m = types.InlineKeyboardMarkup()
-        m.add(types.InlineKeyboardButton("❌ حذف الدور الأساسي", callback_data="del_main"),
-              types.InlineKeyboardButton("❌ حذف الدور الإضافي", callback_data="del_extra"))
-        m.add(types.InlineKeyboardButton("⬅️ رجوع", callback_data="back_to_main"))
-        return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
-
-    elif c.data == "del_main":
-        data['readers']
+# تشغيل البوت مع إعادة المحاولة التلقائية عند الخطأ
+while True:
+    try: bot.infinity_polling(timeout=10, long_polling_timeout=5)
+    except: time.sleep(5)
