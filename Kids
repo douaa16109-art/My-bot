@@ -1,0 +1,55 @@
+import telebot
+import random
+import time
+
+# التوكن الخاص بكِ
+API_TOKEN = '8666840880:AAGNqOZEpz_mlgC_ME9H_GsbJEywoi6pnyU'
+bot = telebot.TeleBot(API_TOKEN)
+
+@bot.message_handler(commands=['start'])
+def welcome(message):
+    welcome_text = "مرحباً بكم في عجلة الاختيارات 🎡✨\n\nيرجى كتابة الأسماء وبينهما فاصلة، ثم ألحقوها بكلمة 'قرعة'."
+    bot.reply_to(message, welcome_text)
+
+@bot.message_handler(func=lambda message: "قرعة" in message.text)
+def start_spin(message):
+    # تنظيف النص واستخراج الأسماء ودعم الفاصلة العربية والإنجليزية
+    raw_text = message.text.replace("قرعة", "").strip()
+    names = [n.strip() for n in raw_text.replace("،", ",").split(",") if n.strip()]
+
+    if len(names) < 2:
+        bot.reply_to(message, "يجب إدخال اسمين على الأقل لبدء الاختيار عشوائياً. 🎡")
+        return
+
+    # مراحل التشويق بعبارات فصيحة ومختصرة
+    msg = bot.send_message(message.chat.id, "جاري تدوير عجلة الاختيارات... 🎡🌀")
+    
+    frames = [
+        "⏳ لحظات من الانتظار...",
+        "🌀 العجلة تدور الآن...",
+        "✨ ترقبوا الاسم المختار..."
+    ]
+    
+    for frame in frames:
+        time.sleep(1.2)
+        try:
+            bot.edit_message_text(frame, message.chat.id, msg.message_id)
+        except:
+            pass
+
+    # اختيار الفائز
+    winner = random.choice(names)
+    
+    # رسالة النتيجة النهائية
+    result_text = (
+        "🎊🎉 تم الاختيار بنجاح 🎉🎊\n\n"
+        "الاسم المختار هو: \n"
+        f"✨💎 **{winner}** 💎✨\n\n"
+        "مباركٌ لكِ! 🎈🧸"
+    )
+    
+    time.sleep(1)
+    bot.edit_message_text(result_text, message.chat.id, msg.message_id, parse_mode="Markdown")
+
+# تشغيل البوت
+bot.polling()
