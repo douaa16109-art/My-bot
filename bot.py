@@ -6,7 +6,7 @@ from threading import Thread
 
 app = Flask('')
 @app.route('/')
-def home(): return "Bot is Fast, Secure & Auto-Updating!"
+def home(): return "Date Fixed - 20 Ramadan!"
 def run(): app.run(host='0.0.0.0', port=8080)
 Thread(target=run).start()
 
@@ -24,12 +24,19 @@ def get_group_data(chat_id):
     return groups_data[chat_id]
 
 def get_hijri_date():
-    today = datetime.utcnow() + timedelta(hours=3)
+    # توقيت مكة المكرمة
+    now = datetime.utcnow() + timedelta(hours=3)
     days_ar = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"]
-    day_name = days_ar[(today.weekday() + 1) % 7]
-    hijri_day = today.day + 10 # مثبت على 20 رمضان بناء على طلبك
-    if hijri_day > 30: hijri_day -= 30
-    return f"📅 {day_name} {today.strftime('%d مارس 2026')} م\n🌙 {hijri_day} رمضان 1447 هـ"
+    day_name = days_ar[(now.weekday() + 1) % 7]
+    
+    # تثبيت الحساب يدوياً لضمان عدم القفز لشوال
+    # اليوم 1 أبريل يقابل 20 رمضان بناءً على طلبك السابق
+    base_date = datetime(2026, 4, 1) 
+    delta_days = (now.date() - base_date.date()).days
+    hijri_day = 20 + delta_days 
+    
+    m_date = now.strftime("%d %B 2026").replace("April", "أبريل").replace("March", "مارس")
+    return f"📅 {day_name} {m_date} م\n🌙 {hijri_day} رمضان 1447 هـ"
 
 def get_text(chat_id):
     data = get_group_data(chat_id)
@@ -91,7 +98,6 @@ def handle_calls(c):
     data = get_group_data(chat_id)
     u_id, u_name = c.from_user.id, c.from_user.first_name
     
-    # حماية الأزرار الخاصة بالمشرفات (إعدادات وتحديث)
     if c.data in ["admin_panel", "manual_sort", "reset_all", "toggle_extra", "refresh_bot"]:
         status = bot.get_chat_member(chat_id, u_id).status
         if status not in ['administrator', 'creator']:
@@ -146,7 +152,6 @@ def handle_calls(c):
         m.add(types.InlineKeyboardButton("⬅️ رجوع للأسماء", callback_data="manual_sort"))
         return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
 
-    # نظام الترتيب اللحظي السريع
     elif c.data.startswith(("up_", "down_")):
         cmd, idx = c.data.split("_")
         idx = int(idx)
@@ -155,13 +160,15 @@ def handle_calls(c):
         elif cmd == "down" and idx < len(data['readers']) - 1:
             data['readers'][idx], data['readers'][idx+1] = data['readers'][idx+1], data['readers'][idx]
         
-        # العودة لقائمة الترتيب مع تحديثها فوراً
         m = types.InlineKeyboardMarkup()
         for i, p in enumerate(data['readers']):
             tag = " (إضافي)" if p['type'] == 'extra' else ""
             m.add(types.InlineKeyboardButton(f"{i+1}- {p['name']}{tag}", callback_data=f"sel_{i}"))
         m.add(types.InlineKeyboardButton("⬅️ رجوع للوحة", callback_data="admin_panel"))
-        return bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
+        bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
+        try: bot.edit_message_text(get_text(chat_id), chat_id, c.message.message_id, parse_mode="HTML", reply_markup=m)
+        except: pass
+        return
 
     elif c.data == "toggle_extra":
         data['extra_open'] = not data['extra_open']
@@ -183,7 +190,6 @@ def handle_calls(c):
             if data['readers'][i]['id'] == u_id and data['readers'][i]['type'] == 'extra':
                 data['readers'].pop(i); break
     
-    # تحديث النص الرئيسي للقائمة في كل مرة ليعكس الترتيب الجديد فوراً
     try:
         bot.edit_message_text(get_text(chat_id), chat_id, c.message.message_id, parse_mode="HTML", reply_markup=main_menu(chat_id))
     except: pass
