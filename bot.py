@@ -6,7 +6,7 @@ from threading import Thread
 
 app = Flask('')
 @app.route('/')
-def home(): return "Auto-Date System is Active!"
+def home(): return "Shawwal Date Fixed to 13!"
 def run(): app.run(host='0.0.0.0', port=8080)
 Thread(target=run).start()
 
@@ -23,7 +23,6 @@ def get_group_data(chat_id):
         }
     return groups_data[chat_id]
 
-# دالة حساب التاريخ التلقائي بدقة
 def get_hijri_date():
     # توقيت الجزائر (UTC+1)
     now = datetime.utcnow() + timedelta(hours=1)
@@ -37,20 +36,13 @@ def get_hijri_date():
         9: "سبتمبر", 10: "أكتوبر", 11: "نوفمبر", 12: "ديسمبر"
     }
     
-    # ضبط المعادلة: 1 أبريل 2026 = 13 رمضان 1447
+    # ضبط المعادلة: اليوم 1 أبريل 2026 = 13 شوال
     base_date = datetime(2026, 4, 1)
     delta_days = (now.date() - base_date.date()).days
-    hijri_day = 13 + delta_days
+    hijri_day = 13 + delta_days # البداية من 13 شوال
     
-    # التعامل مع نهاية الشهر الهجري (إذا زاد عن 30)
-    if hijri_day > 30:
-        hijri_day -= 30
-        hijri_month = "شوال"
-    else:
-        hijri_month = "رمضان"
-        
     m_date = f"{now.day:02} {months_ar[now.month]} {now.year}"
-    return f"📅 {day_name} {m_date} م\n🌙 {hijri_day} {hijri_month} 1447 هـ"
+    return f"📅 {day_name} {m_date} م\n🌙 {hijri_day} شوال 1447 هـ"
 
 def get_text(chat_id):
     data = get_group_data(chat_id)
