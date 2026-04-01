@@ -6,7 +6,7 @@ from threading import Thread
 
 app = Flask('')
 @app.route('/')
-def home(): return "Date System Fixed!"
+def home(): return "Auto-Date System is Active!"
 def run(): app.run(host='0.0.0.0', port=8080)
 Thread(target=run).start()
 
@@ -23,10 +23,10 @@ def get_group_data(chat_id):
         }
     return groups_data[chat_id]
 
-# دالة التاريخ اليدوية والمستقرة
+# دالة حساب التاريخ التلقائي بدقة
 def get_hijri_date():
-    # توقيت الجزائر/مكة (تعديل الساعات لضبط اليوم)
-    now = datetime.utcnow() + timedelta(hours=3)
+    # توقيت الجزائر (UTC+1)
+    now = datetime.utcnow() + timedelta(hours=1)
     
     days_ar = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"]
     day_name = days_ar[(now.weekday() + 1) % 7]
@@ -37,20 +37,26 @@ def get_hijri_date():
         9: "سبتمبر", 10: "أكتوبر", 11: "نوفمبر", 12: "ديسمبر"
     }
     
-    # حساب يدوي: يوم 1 أبريل 2026 هو 13 رمضان 1447هـ فلكياً، 
-    # لكن سنضبطه ليكون 20 رمضان كما في الصورة المطلوبة
-    ref_date = datetime(2026, 4, 1)
-    diff = (now.date() - ref_date.date()).days
-    hijri_day = 20 + diff 
+    # ضبط المعادلة: 1 أبريل 2026 = 13 رمضان 1447
+    base_date = datetime(2026, 4, 1)
+    delta_days = (now.date() - base_date.date()).days
+    hijri_day = 13 + delta_days
     
+    # التعامل مع نهاية الشهر الهجري (إذا زاد عن 30)
+    if hijri_day > 30:
+        hijri_day -= 30
+        hijri_month = "شوال"
+    else:
+        hijri_month = "رمضان"
+        
     m_date = f"{now.day:02} {months_ar[now.month]} {now.year}"
-    return f"📅 {day_name} {m_date} م\n🌙 {hijri_day} رمضان 1447 هـ"
+    return f"📅 {day_name} {m_date} م\n🌙 {hijri_day} {hijri_month} 1447 هـ"
 
 def get_text(chat_id):
     data = get_group_data(chat_id)
     t = "❄️ <b>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ</b> ❄️\n"
     t += "🌿 <b>مَجْلِسُ تِلَاوَةِ القُرْآنِ الكريم</b> 🌿\n\n"
-    t += f"🗓️ {get_hijri_date()}\n" # تم تعديل الأيقونة لتطابق الصورة
+    t += f"{get_hijri_date()}\n"
     t += "☀️ ┈┈┈•●◈💠◈●•┈┈┈ ☀️\n\n"
     t += "<blockquote>📖 اعْلَمِي رَعَاكِ اللَّه؛ أَنَّ حُضُورَكِ لِهَذَا المَجْلِسِ مَحْضُ تَوْفِيقٍ وَاصْطِفَاءٍ مِنْ رَبِّكِ.. فَكَمْ مِنْ مَحْرُومٍ وَالقُرْآنُ بَيْنَ يَدَيْهِ، وَكَمْ مِنْ مُوَفَّقٍ يُسَاقُ الخَيْرُ إِلَيْهِ!</blockquote>\n"
     t += "☀️ ┈┈┈•●◈💠◈●•┈┈┈ ☀️\n\n"
@@ -87,10 +93,9 @@ def main_menu(chat_id):
 
 @bot.message_handler(commands=['start'])
 def start(m):
-    # حماية الأمر start للمشرفات فقط
     status = bot.get_chat_member(m.chat.id, m.from_user.id).status
     if status not in ['administrator', 'creator']:
-        return bot.reply_to(m, "⚠️ عذراً، هذا الأمر للمشرفات فقط.")
+        return bot.answer_callback_query(m.chat.id, "⚠️ للمشرفات فقط")
     data = get_group_data(m.chat.id)
     data['waiting'] = True
     bot.send_message(m.chat.id, "📝 حياكِ الله يا مشرفة.. اكتبي اسم السورة الآن:")
@@ -107,7 +112,6 @@ def handle_calls(c):
     data = get_group_data(chat_id)
     u_id, u_name = c.from_user.id, c.from_user.first_name
     
-    # حماية أزرار المشرفات
     if c.data in ["admin_panel", "manual_sort", "reset_all", "toggle_extra", "refresh_bot"]:
         status = bot.get_chat_member(chat_id, u_id).status
         if status not in ['administrator', 'creator']:
@@ -170,7 +174,6 @@ def handle_calls(c):
         elif cmd == "down" and idx < len(data['readers']) - 1:
             data['readers'][idx], data['readers'][idx+1] = data['readers'][idx+1], data['readers'][idx]
         
-        # تحديث فوري للقائمة والنص أثناء الترتيب
         m = types.InlineKeyboardMarkup()
         for i, p in enumerate(data['readers']):
             tag = " (إضافي)" if p['type'] == 'extra' else ""
