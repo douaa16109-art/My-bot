@@ -6,7 +6,7 @@ from threading import Thread
 
 app = Flask('')
 @app.route('/')
-def home(): return "Date Fixed - 20 Ramadan!"
+def home(): return "Date System Fixed!"
 def run(): app.run(host='0.0.0.0', port=8080)
 Thread(target=run).start()
 
@@ -23,26 +23,34 @@ def get_group_data(chat_id):
         }
     return groups_data[chat_id]
 
+# دالة التاريخ اليدوية والمستقرة
 def get_hijri_date():
-    # توقيت مكة المكرمة
+    # توقيت الجزائر/مكة (تعديل الساعات لضبط اليوم)
     now = datetime.utcnow() + timedelta(hours=3)
+    
     days_ar = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"]
     day_name = days_ar[(now.weekday() + 1) % 7]
     
-    # تثبيت الحساب يدوياً لضمان عدم القفز لشوال
-    # اليوم 1 أبريل يقابل 20 رمضان بناءً على طلبك السابق
-    base_date = datetime(2026, 4, 1) 
-    delta_days = (now.date() - base_date.date()).days
-    hijri_day = 20 + delta_days 
+    months_ar = {
+        1: "يناير", 2: "فبراير", 3: "مارس", 4: "أبريل", 
+        5: "ماي", 6: "يونيو", 7: "يوليو", 8: "أغسطس", 
+        9: "سبتمبر", 10: "أكتوبر", 11: "نوفمبر", 12: "ديسمبر"
+    }
     
-    m_date = now.strftime("%d %B 2026").replace("April", "أبريل").replace("March", "مارس")
+    # حساب يدوي: يوم 1 أبريل 2026 هو 13 رمضان 1447هـ فلكياً، 
+    # لكن سنضبطه ليكون 20 رمضان كما في الصورة المطلوبة
+    ref_date = datetime(2026, 4, 1)
+    diff = (now.date() - ref_date.date()).days
+    hijri_day = 20 + diff 
+    
+    m_date = f"{now.day:02} {months_ar[now.month]} {now.year}"
     return f"📅 {day_name} {m_date} م\n🌙 {hijri_day} رمضان 1447 هـ"
 
 def get_text(chat_id):
     data = get_group_data(chat_id)
     t = "❄️ <b>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ</b> ❄️\n"
     t += "🌿 <b>مَجْلِسُ تِلَاوَةِ القُرْآنِ الكريم</b> 🌿\n\n"
-    t += f"{get_hijri_date()}\n"
+    t += f"🗓️ {get_hijri_date()}\n" # تم تعديل الأيقونة لتطابق الصورة
     t += "☀️ ┈┈┈•●◈💠◈●•┈┈┈ ☀️\n\n"
     t += "<blockquote>📖 اعْلَمِي رَعَاكِ اللَّه؛ أَنَّ حُضُورَكِ لِهَذَا المَجْلِسِ مَحْضُ تَوْفِيقٍ وَاصْطِفَاءٍ مِنْ رَبِّكِ.. فَكَمْ مِنْ مَحْرُومٍ وَالقُرْآنُ بَيْنَ يَدَيْهِ، وَكَمْ مِنْ مُوَفَّقٍ يُسَاقُ الخَيْرُ إِلَيْهِ!</blockquote>\n"
     t += "☀️ ┈┈┈•●◈💠◈●•┈┈┈ ☀️\n\n"
@@ -79,9 +87,10 @@ def main_menu(chat_id):
 
 @bot.message_handler(commands=['start'])
 def start(m):
+    # حماية الأمر start للمشرفات فقط
     status = bot.get_chat_member(m.chat.id, m.from_user.id).status
     if status not in ['administrator', 'creator']:
-        return bot.answer_callback_query(m.chat.id, "⚠️ للمشرفات فقط")
+        return bot.reply_to(m, "⚠️ عذراً، هذا الأمر للمشرفات فقط.")
     data = get_group_data(m.chat.id)
     data['waiting'] = True
     bot.send_message(m.chat.id, "📝 حياكِ الله يا مشرفة.. اكتبي اسم السورة الآن:")
@@ -98,10 +107,11 @@ def handle_calls(c):
     data = get_group_data(chat_id)
     u_id, u_name = c.from_user.id, c.from_user.first_name
     
+    # حماية أزرار المشرفات
     if c.data in ["admin_panel", "manual_sort", "reset_all", "toggle_extra", "refresh_bot"]:
         status = bot.get_chat_member(chat_id, u_id).status
         if status not in ['administrator', 'creator']:
-            return bot.answer_callback_query(c.id, "⚠️ عذراً، هذا الخيار للمشرفات فقط.", show_alert=True)
+            return bot.answer_callback_query(c.id, "⚠️ للمشرفات فقط", show_alert=True)
 
     bot.answer_callback_query(c.id)
 
@@ -160,12 +170,13 @@ def handle_calls(c):
         elif cmd == "down" and idx < len(data['readers']) - 1:
             data['readers'][idx], data['readers'][idx+1] = data['readers'][idx+1], data['readers'][idx]
         
+        # تحديث فوري للقائمة والنص أثناء الترتيب
         m = types.InlineKeyboardMarkup()
         for i, p in enumerate(data['readers']):
             tag = " (إضافي)" if p['type'] == 'extra' else ""
             m.add(types.InlineKeyboardButton(f"{i+1}- {p['name']}{tag}", callback_data=f"sel_{i}"))
         m.add(types.InlineKeyboardButton("⬅️ رجوع للوحة", callback_data="admin_panel"))
-        bot.edit_message_reply_markup(chat_id, c.message.message_id, reply_markup=m)
+        
         try: bot.edit_message_text(get_text(chat_id), chat_id, c.message.message_id, parse_mode="HTML", reply_markup=m)
         except: pass
         return
